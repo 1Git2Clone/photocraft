@@ -1,13 +1,15 @@
 name: Perf (nightly)
 
-# The performance scorecard (#221): `cargo xtask perf` on a fixed macOS runner (Apple silicon,
-# Metal), every night and on demand. It never runs on pull requests, so it can't block one.
-# It fails when an enforced budget in perf/budgets.toml breaks or a scenario's p50 regresses
-# more than 15 % against perf/baseline.json from the same machine class (other classes are
-# never compared). The table goes to the job summary; results.json is uploaded as an artifact.
+# The performance scorecard (#221): `cargo xtask perf` on fixed GitHub-hosted runners, one per
+# OS (macOS on Apple silicon with Metal, Linux and Windows on their standard x86-64 images),
+# every night and on demand. It never runs on pull requests, so it can't block one.
+# Each runner is its own machine class. A run fails when an enforced budget in
+# perf/budgets.toml breaks, or when a scenario's p50 regresses more than 15 % against a
+# baseline from the same machine class (other classes are never compared). The table goes to
+# the job summary; results.json is uploaded as an artifact.
 #
-# To give this runner class its own baseline: run it by hand with "update_baseline", download
-# the `perf-baseline` artifact and commit it as perf/baseline.json in a PR.
+# To (re)record a class's baseline: run it by hand with "update_baseline", download that
+# runner's `perf-baseline-<os>` artifact and commit it under perf/baselines/ in a PR.
 
 on:
   schedule:
@@ -35,26 +37,48 @@ env:
 
 jobs:
   perf:
-    name: perf (macOS, Apple GPU)
-    # Pinned image, not -latest: the machine class must stay fixed for comparisons.
-    runs-on: macos-15
-    timeout-minutes: 120
+    name: perf (${{ matrix.label }})
+    # Pinned images, not -latest: the machine class must stay fixed for comparisons.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runner: macos-15
+            label: macOS, Apple GPU
+          - os: linux
+            runner: ubuntu-24.04
+            label: Linux, x86-64
+          - os: windows
+            runner: windows-2022
+            label: Windows, x86-64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
+      - name: Install Linux system dependencies (egui/winit)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libgtk-3-dev
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: perf-release
+          key: perf-release-${{ matrix.os }}
 
       - name: Run benchmarks
         id: perf
         env:
           QUICK: ${{ inputs.quick }}
           UPDATE: ${{ inputs.update_baseline }}
+        shell: bash
         run: |
           args=()
           if [ "$QUICK" = "true" ]; then args+=(--quick); fi
@@ -63,6 +87,7 @@ jobs:
 
       - name: Job summary
         if: always()
+        shell: bash
         run: |
           if [ -f target/perf/summary.md ]; then
             cat target/perf/summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -74,7 +99,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: perf-results
+          name: perf-results-${{ matrix.os }}
           path: |
             target/perf/*.json
             target/perf/summary.md
@@ -85,7 +110,7 @@ jobs:
         if: always() && inputs.update_baseline
         uses: actions/upload-artifact@v4
         with:
-          name: perf-baseline
+          name: perf-baseline-${{ matrix.os }}
           path: perf/baseline.json
           if-no-files-found: warn
           retention-days: 30

@@ -1,0 +1,313 @@
+{
+  "machine": {
+    "arch": "x86_64",
+    "class": "linux-x86-64-amd-epyc-7763-64-core-processor-llvmpipe-llvm-20-1-2-256-bits",
+    "cores": 4,
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "gpu_adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+    "os": "linux",
+    "os_version": "Ubuntu 24.04.5 LTS",
+    "ram_bytes": 16766414848
+  },
+  "machine_class": "linux-x86-64-amd-epyc-7763-64-core-processor-llvmpipe-llvm-20-1-2-256-bits",
+  "modes": {
+    "full": {
+      "commit": "6605a1193a1e8c9305ac10de4b9015e8f0290af6",
+      "date": "2026-10-09T22:29:02Z",
+      "failed": {
+        "P40": "bench `interactive_bench` failed: interactive_bench --reps 5 --json /home/runner/work/photocraft/photocraft/target/perf/interactive_bench.json: exited with exit status: 101",
+        "P41": "bench `interactive_bench` failed: interactive_bench --reps 5 --json /home/runner/work/photocraft/photocraft/target/perf/interactive_bench.json: exited with exit status: 101",
+        "P42": "bench `interactive_bench` failed: interactive_bench --reps 5 --json /home/runner/work/photocraft/photocraft/target/perf/interactive_bench.json: exited with exit status: 101",
+        "P43": "bench `interactive_bench` failed: interactive_bench --reps 5 --json /home/runner/work/photocraft/photocraft/target/perf/interactive_bench.json: exited with exit status: 101",
+        "P44": "bench `interactive_bench` failed: interactive_bench --reps 5 --json /home/runner/work/photocraft/photocraft/target/perf/interactive_bench.json: exited with exit status: 101",
+        "P45": "bench `fx_bench` failed: fx_bench --no-cpu --reps 5 --json /home/runner/work/photocraft/photocraft/target/perf/fx_bench.json: exited with exit status: 101",
+        "P46": "bench `fx_bench` failed: fx_bench --no-cpu --reps 5 --json /home/runner/work/photocraft/photocraft/target/perf/fx_bench.json: exited with exit status: 101"
+      },
+      "load_avg_end": [
+        2.95,
+        3.96,
+        3.57
+      ],
+      "load_avg_start": [
+        4.87,
+        4.86,
+        3.42
+      ],
+      "scenarios": {
+        "P1": {
+          "gpu_bytes": 106462852,
+          "max_ms": 334.691594,
+          "n": 15,
+          "p50_ms": 319.790317,
+          "p95_ms": 334.691594,
+          "peak_rss_bytes": 1378291712
+        },
+        "P10": {
+          "gpu_bytes": 106462852,
+          "max_ms": 3089.5245720000003,
+          "n": 5,
+          "p50_ms": 2826.915853,
+          "p95_ms": 3089.5245720000003,
+          "peak_rss_bytes": 2833928192
+        },
+        "P11": {
+          "gpu_bytes": 106462852,
+          "max_ms": 3017.404263,
+          "n": 5,
+          "p50_ms": 2920.6855549999996,
+          "p95_ms": 3017.404263,
+          "peak_rss_bytes": 2540494848
+        },
+        "P12": {
+          "gpu_bytes": 106462852,
+          "max_ms": 19.693707,
+          "n": 15,
+          "p50_ms": 18.766179,
+          "p95_ms": 19.693707,
+          "peak_rss_bytes": 2281226240
+        },
+        "P13": {
+          "gpu_bytes": 2115958908,
+          "max_ms": 8.998107,
+          "n": 15,
+          "p50_ms": 5.8935580000000005,
+          "p95_ms": 8.998107,
+          "peak_rss_bytes": 3815366656
+        },
+        "P14": {
+          "gpu_bytes": 2115958908,
+          "max_ms": 829.6765139999999,
+          "n": 15,
+          "p50_ms": 728.6987670000001,
+          "p95_ms": 829.6765139999999,
+          "peak_rss_bytes": 5051338752
+        },
+        "P16": {
+          "gpu_bytes": 1750668536,
+          "max_ms": 51.45207,
+          "n": 15,
+          "p50_ms": 12.840185,
+          "p95_ms": 51.45207,
+          "peak_rss_bytes": 5240348672
+        },
+        "P17": {
+          "gpu_bytes": 1750668536,
+          "max_ms": 221.069838,
+          "n": 15,
+          "p50_ms": 205.083199,
+          "p95_ms": 221.069838,
+          "peak_rss_bytes": 5241397248
+        },
+        "P18": {
+          "gpu_bytes": 106462852,
+          "max_ms": 2649.297603,
+          "n": 5,
+          "p50_ms": 2604.8971050000005,
+          "p95_ms": 2649.297603,
+          "peak_rss_bytes": 4741316608
+        },
+        "P19": {
+          "gpu_bytes": 106462852,
+          "max_ms": 2649.297603,
+          "n": 5,
+          "p50_ms": 2604.8971050000005,
+          "p95_ms": 2649.297603,
+          "peak_rss_bytes": 4741316608
+        },
+        "P2": {
+          "gpu_bytes": 106462852,
+          "max_ms": 167.954147,
+          "n": 15,
+          "p50_ms": 162.140672,
+          "p95_ms": 167.954147,
+          "peak_rss_bytes": 1773436928
+        },
+        "P21": {
+          "gpu_bytes": 0,
+          "max_ms": 133.260628,
+          "n": 5,
+          "p50_ms": 128.393357,
+          "p95_ms": 133.260628,
+          "peak_rss_bytes": 4609069056
+        },
+        "P22": {
+          "gpu_bytes": 99663572,
+          "max_ms": 674.317642,
+          "n": 5,
+          "p50_ms": 64.086145,
+          "p95_ms": 674.317642,
+          "peak_rss_bytes": 4609855488
+        },
+        "P24": {
+          "gpu_bytes": 46137344,
+          "max_ms": 1.425231,
+          "n": 5,
+          "p50_ms": 1.383363,
+          "p95_ms": 1.425231,
+          "peak_rss_bytes": 4649254912
+        },
+        "P25": {
+          "gpu_bytes": 46137344,
+          "max_ms": 445.574122,
+          "n": 8,
+          "p50_ms": 33.466285,
+          "p95_ms": 445.574122,
+          "peak_rss_bytes": 4741382144
+        },
+        "P26": {
+          "gpu_bytes": 0,
+          "max_ms": 245.538967,
+          "n": 5,
+          "p50_ms": 241.865511,
+          "p95_ms": 245.538967,
+          "peak_rss_bytes": 4373696512
+        },
+        "P27": {
+          "gpu_bytes": 0,
+          "max_ms": 281.17004299999996,
+          "n": 5,
+          "p50_ms": 277.692385,
+          "p95_ms": 281.17004299999996,
+          "peak_rss_bytes": 4377919488
+        },
+        "P28": {
+          "gpu_bytes": 0,
+          "max_ms": 15677.903944,
+          "n": 1,
+          "p50_ms": 15677.903944,
+          "p95_ms": 15677.903944,
+          "peak_rss_bytes": 5229420544
+        },
+        "P29": {
+          "gpu_bytes": 0,
+          "max_ms": 656.257325,
+          "n": 5,
+          "p50_ms": 654.2851880000001,
+          "p95_ms": 656.257325,
+          "peak_rss_bytes": 4018659328
+        },
+        "P3": {
+          "gpu_bytes": 106462852,
+          "max_ms": 164.872854,
+          "n": 15,
+          "p50_ms": 158.566304,
+          "p95_ms": 164.872854,
+          "peak_rss_bytes": 1773461504
+        },
+        "P31": {
+          "gpu_bytes": null,
+          "max_ms": 26.8857109999999,
+          "n": 40,
+          "p50_ms": 17.58030999999994,
+          "p95_ms": 21.31296599999996,
+          "peak_rss_bytes": null
+        },
+        "P33": {
+          "gpu_bytes": 92272684,
+          "max_ms": 162.55860099999998,
+          "n": 15,
+          "p50_ms": 12.787457,
+          "p95_ms": 162.55860099999998,
+          "peak_rss_bytes": 4019490816
+        },
+        "P36": {
+          "gpu_bytes": null,
+          "max_ms": 28.258124,
+          "n": 40,
+          "p50_ms": 27.435502,
+          "p95_ms": 28.136045,
+          "peak_rss_bytes": null
+        },
+        "P4": {
+          "gpu_bytes": 106462852,
+          "max_ms": 182.926038,
+          "n": 15,
+          "p50_ms": 168.43948300000002,
+          "p95_ms": 182.926038,
+          "peak_rss_bytes": 1773473792
+        },
+        "P47": {
+          "gpu_bytes": null,
+          "max_ms": 9.478445,
+          "n": 30,
+          "p50_ms": 6.36006,
+          "p95_ms": 8.134245,
+          "peak_rss_bytes": 288141312
+        },
+        "P48": {
+          "gpu_bytes": null,
+          "max_ms": 3641.40747,
+          "n": 3,
+          "p50_ms": 3634.573271,
+          "p95_ms": 3641.40747,
+          "peak_rss_bytes": null
+        },
+        "P49": {
+          "gpu_bytes": 46137344,
+          "max_ms": 66.703442,
+          "n": 8,
+          "p50_ms": 21.451206,
+          "p95_ms": 66.703442,
+          "peak_rss_bytes": 5278617600
+        },
+        "P5": {
+          "gpu_bytes": 106462852,
+          "max_ms": 170.566994,
+          "n": 15,
+          "p50_ms": 118.954941,
+          "p95_ms": 170.566994,
+          "peak_rss_bytes": 1776271360
+        },
+        "P50": {
+          "gpu_bytes": 46137344,
+          "max_ms": 387.867587,
+          "n": 1774,
+          "p50_ms": 0.564518,
+          "p95_ms": 1.202544,
+          "peak_rss_bytes": 4844216320
+        },
+        "P51": {
+          "gpu_bytes": 106462852,
+          "max_ms": 2.028762,
+          "n": 15,
+          "p50_ms": 1.840218,
+          "p95_ms": 2.028762,
+          "peak_rss_bytes": 2281226240
+        },
+        "P6": {
+          "gpu_bytes": 106462852,
+          "max_ms": 311.008744,
+          "n": 15,
+          "p50_ms": 164.334625,
+          "p95_ms": 311.008744,
+          "peak_rss_bytes": 1800544256
+        },
+        "P7": {
+          "gpu_bytes": 106462852,
+          "max_ms": 168.18468299999998,
+          "n": 15,
+          "p50_ms": 161.75999199999998,
+          "p95_ms": 168.18468299999998,
+          "peak_rss_bytes": 1803476992
+        },
+        "P8": {
+          "gpu_bytes": 106462852,
+          "max_ms": 2020.997927,
+          "n": 5,
+          "p50_ms": 1709.588964,
+          "p95_ms": 2020.997927,
+          "peak_rss_bytes": 2513993728
+        },
+        "P9": {
+          "gpu_bytes": 106462852,
+          "max_ms": 2099.75499,
+          "n": 5,
+          "p50_ms": 2091.151891,
+          "p95_ms": 2099.75499,
+          "peak_rss_bytes": 2514272256
+        }
+      }
+    }
+  },
+  "schema": 1
+}

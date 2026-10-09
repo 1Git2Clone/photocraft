@@ -1,0 +1,305 @@
+{
+  "machine": {
+    "arch": "x86_64",
+    "class": "windows-x86-64-amd64-family-25-model-1-stepping-1-authenticamd-microsoft-basic-render-driver",
+    "cores": 4,
+    "cpu": "AMD64 Family 25 Model 1 Stepping 1, AuthenticAMD",
+    "gpu_adapter": "Microsoft Basic Render Driver",
+    "os": "windows",
+    "os_version": "Microsoft Windows [Version 10.0.20348.5622]",
+    "ram_bytes": null
+  },
+  "machine_class": "windows-x86-64-amd64-family-25-model-1-stepping-1-authenticamd-microsoft-basic-render-driver",
+  "modes": {
+    "full": {
+      "commit": "6605a1193a1e8c9305ac10de4b9015e8f0290af6",
+      "date": "2026-10-09T22:38:28Z",
+      "failed": {
+        "P40": "bench `interactive_bench` failed: interactive_bench --reps 5 --json D:\\a\\photocraft\\photocraft\\target\\perf\\interactive_bench.json: exited with exit code: 101",
+        "P41": "bench `interactive_bench` failed: interactive_bench --reps 5 --json D:\\a\\photocraft\\photocraft\\target\\perf\\interactive_bench.json: exited with exit code: 101",
+        "P42": "bench `interactive_bench` failed: interactive_bench --reps 5 --json D:\\a\\photocraft\\photocraft\\target\\perf\\interactive_bench.json: exited with exit code: 101",
+        "P43": "bench `interactive_bench` failed: interactive_bench --reps 5 --json D:\\a\\photocraft\\photocraft\\target\\perf\\interactive_bench.json: exited with exit code: 101",
+        "P44": "bench `interactive_bench` failed: interactive_bench --reps 5 --json D:\\a\\photocraft\\photocraft\\target\\perf\\interactive_bench.json: exited with exit code: 101",
+        "P45": "bench `fx_bench` failed: fx_bench --no-cpu --reps 5 --json D:\\a\\photocraft\\photocraft\\target\\perf\\fx_bench.json: exited with exit code: 101",
+        "P46": "bench `fx_bench` failed: fx_bench --no-cpu --reps 5 --json D:\\a\\photocraft\\photocraft\\target\\perf\\fx_bench.json: exited with exit code: 101"
+      },
+      "load_avg_end": null,
+      "load_avg_start": null,
+      "scenarios": {
+        "P1": {
+          "gpu_bytes": 322731526,
+          "max_ms": 8.8261,
+          "n": 15,
+          "p50_ms": 8.142299999999999,
+          "p95_ms": 8.8261,
+          "peak_rss_bytes": 396185600
+        },
+        "P10": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.3531,
+          "n": 5,
+          "p50_ms": 0.296,
+          "p95_ms": 0.3531,
+          "peak_rss_bytes": 1062481920
+        },
+        "P11": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.4647,
+          "n": 5,
+          "p50_ms": 0.3624,
+          "p95_ms": 0.4647,
+          "peak_rss_bytes": 736927744
+        },
+        "P12": {
+          "gpu_bytes": 192647340,
+          "max_ms": 3.2201,
+          "n": 15,
+          "p50_ms": 3.0747,
+          "p95_ms": 3.2201,
+          "peak_rss_bytes": 478740480
+        },
+        "P13": {
+          "gpu_bytes": 2115958908,
+          "max_ms": 0.8871,
+          "n": 15,
+          "p50_ms": 0.6589,
+          "p95_ms": 0.8871,
+          "peak_rss_bytes": 186933248
+        },
+        "P14": {
+          "gpu_bytes": 2115958908,
+          "max_ms": 266.7,
+          "n": 15,
+          "p50_ms": 35.8842,
+          "p95_ms": 266.7,
+          "peak_rss_bytes": 1447555072
+        },
+        "P16": {
+          "gpu_bytes": 1315962880,
+          "max_ms": 0.6536000000000001,
+          "n": 15,
+          "p50_ms": 0.4109,
+          "p95_ms": 0.6536000000000001,
+          "peak_rss_bytes": 531390464
+        },
+        "P17": {
+          "gpu_bytes": 1315962880,
+          "max_ms": 15.233199999999998,
+          "n": 15,
+          "p50_ms": 14.2248,
+          "p95_ms": 15.233199999999998,
+          "peak_rss_bytes": 1064771584
+        },
+        "P18": {
+          "gpu_bytes": 322731526,
+          "max_ms": 475.1372,
+          "n": 5,
+          "p50_ms": 361.7999,
+          "p95_ms": 475.1372,
+          "peak_rss_bytes": 1021259776
+        },
+        "P19": {
+          "gpu_bytes": 322731526,
+          "max_ms": 475.1372,
+          "n": 5,
+          "p50_ms": 361.7999,
+          "p95_ms": 475.1372,
+          "peak_rss_bytes": 1021259776
+        },
+        "P2": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.1815,
+          "n": 15,
+          "p50_ms": 0.0665,
+          "p95_ms": 0.1815,
+          "peak_rss_bytes": 407998464
+        },
+        "P21": {
+          "gpu_bytes": 322731526,
+          "max_ms": 123.452,
+          "n": 5,
+          "p50_ms": 121.3423,
+          "p95_ms": 123.452,
+          "peak_rss_bytes": 706899968
+        },
+        "P22": {
+          "gpu_bytes": 322731526,
+          "max_ms": 61.0526,
+          "n": 5,
+          "p50_ms": 55.885,
+          "p95_ms": 61.0526,
+          "peak_rss_bytes": 688185344
+        },
+        "P24": {
+          "gpu_bytes": 322731526,
+          "max_ms": 2.4295,
+          "n": 5,
+          "p50_ms": 2.1985,
+          "p95_ms": 2.4295,
+          "peak_rss_bytes": 686800896
+        },
+        "P25": {
+          "gpu_bytes": 322731526,
+          "max_ms": 524.1660999999999,
+          "n": 8,
+          "p50_ms": 19.9714,
+          "p95_ms": 524.1660999999999,
+          "peak_rss_bytes": 1067147264
+        },
+        "P26": {
+          "gpu_bytes": 0,
+          "max_ms": 266.64320000000004,
+          "n": 5,
+          "p50_ms": 217.0946,
+          "p95_ms": 266.64320000000004,
+          "peak_rss_bytes": 992215040
+        },
+        "P27": {
+          "gpu_bytes": 0,
+          "max_ms": 249.7268,
+          "n": 5,
+          "p50_ms": 247.3525,
+          "p95_ms": 249.7268,
+          "peak_rss_bytes": 1059000320
+        },
+        "P28": {
+          "gpu_bytes": 0,
+          "max_ms": 15352.0643,
+          "n": 1,
+          "p50_ms": 15352.0643,
+          "p95_ms": 15352.0643,
+          "peak_rss_bytes": 1942396928
+        },
+        "P29": {
+          "gpu_bytes": 0,
+          "max_ms": 799.5693,
+          "n": 5,
+          "p50_ms": 777.3858,
+          "p95_ms": 799.5693,
+          "peak_rss_bytes": 761778176
+        },
+        "P3": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.1884,
+          "n": 15,
+          "p50_ms": 0.0682,
+          "p95_ms": 0.1884,
+          "peak_rss_bytes": 405254144
+        },
+        "P31": {
+          "gpu_bytes": null,
+          "max_ms": 23.654300000000035,
+          "n": 40,
+          "p50_ms": 22.1601,
+          "p95_ms": 23.078599999999938,
+          "peak_rss_bytes": null
+        },
+        "P33": {
+          "gpu_bytes": 83097644,
+          "max_ms": 0.4504,
+          "n": 15,
+          "p50_ms": 0.1932,
+          "p95_ms": 0.4504,
+          "peak_rss_bytes": 387702784
+        },
+        "P36": {
+          "gpu_bytes": null,
+          "max_ms": 38.2929,
+          "n": 40,
+          "p50_ms": 32.323100000000004,
+          "p95_ms": 36.4889,
+          "peak_rss_bytes": null
+        },
+        "P4": {
+          "gpu_bytes": 322731526,
+          "max_ms": 1.8776,
+          "n": 15,
+          "p50_ms": 0.791,
+          "p95_ms": 1.8776,
+          "peak_rss_bytes": 404021248
+        },
+        "P47": {
+          "gpu_bytes": null,
+          "max_ms": 10.604,
+          "n": 30,
+          "p50_ms": 8.7233,
+          "p95_ms": 10.5949,
+          "peak_rss_bytes": 111808512
+        },
+        "P48": {
+          "gpu_bytes": null,
+          "max_ms": 0.0069,
+          "n": 3,
+          "p50_ms": 0.0018,
+          "p95_ms": 0.0069,
+          "peak_rss_bytes": null
+        },
+        "P49": {
+          "gpu_bytes": 322731526,
+          "max_ms": 70.93530000000001,
+          "n": 8,
+          "p50_ms": 21.9838,
+          "p95_ms": 70.93530000000001,
+          "peak_rss_bytes": 1346613248
+        },
+        "P5": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.7838,
+          "n": 15,
+          "p50_ms": 0.0589,
+          "p95_ms": 0.7838,
+          "peak_rss_bytes": 265879552
+        },
+        "P50": {
+          "gpu_bytes": 322731526,
+          "max_ms": 546.1709999999999,
+          "n": 942,
+          "p50_ms": 0.8805,
+          "p95_ms": 1.5721,
+          "peak_rss_bytes": 1099251712
+        },
+        "P51": {
+          "gpu_bytes": 192647340,
+          "max_ms": 0.2592,
+          "n": 15,
+          "p50_ms": 0.2058,
+          "p95_ms": 0.2592,
+          "peak_rss_bytes": 478932992
+        },
+        "P6": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.06899999999999999,
+          "n": 15,
+          "p50_ms": 0.0447,
+          "p95_ms": 0.06899999999999999,
+          "peak_rss_bytes": 265605120
+        },
+        "P7": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.0279,
+          "n": 15,
+          "p50_ms": 0.0266,
+          "p95_ms": 0.0279,
+          "peak_rss_bytes": 257769472
+        },
+        "P8": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.2481,
+          "n": 5,
+          "p50_ms": 0.1679,
+          "p95_ms": 0.2481,
+          "peak_rss_bytes": 350777344
+        },
+        "P9": {
+          "gpu_bytes": 322731526,
+          "max_ms": 0.2211,
+          "n": 5,
+          "p50_ms": 0.1888,
+          "p95_ms": 0.2211,
+          "peak_rss_bytes": 350822400
+        }
+      }
+    }
+  },
+  "schema": 1
+}

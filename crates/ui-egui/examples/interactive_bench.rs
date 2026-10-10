@@ -117,10 +117,6 @@ struct Bench {
     /// `--json` (`cargo xtask perf`).
     extra: Vec<(Vec<f64>, Option<u64>)>,
     rss: photocraft_testkit::perf::RssSampler,
-    /// `info.name` of the GPU adapter, or `None` if no adapter / software renderer / device
-    /// creation failed. Surfaces in the JSON `context.gpu_adapter` (and in `context.skipped`
-    /// when the bench exits early because there is no working GPU).
-    adapter: Option<String>,
 }
 
 impl Bench {
@@ -208,11 +204,9 @@ fn main() {
     let reps: usize = arg(&args, "--reps").and_then(|v| v.parse().ok()).unwrap_or(5).max(1);
     let force_cpu = args.iter().any(|a| a == "--cpu");
 
-    // Resolve the GPU up front: detect software renderers (CI on Linux/Windows), record the
-    // adapter name for the report, and decide whether we have anything GPU-side to time.
+    // Resolve the GPU up front: detect software renderers (CI on Linux/Windows) and decide
+    // whether we have anything GPU-side to time.
     let g = if force_cpu { None } else { gpu() };
-    let adapter = g.as_ref().map(|_| "see adapter: line above".to_string());
-    // adapter is captured in `Bench` so the JSON can include it.
 
     // If the perf runner asked for a --json report and we have no GPU on a software renderer,
     // the GPU scenarios can't run here: write a skipped report and exit cleanly. CPU-only
@@ -262,7 +256,6 @@ fn main() {
         rows: Vec::new(),
         extra: Vec::new(),
         rss: photocraft_testkit::perf::RssSampler::start(std::time::Duration::from_millis(2)),
-        adapter,
     };
     println!("document {w}×{h} ({:.1} MP), 8-bit RGB, {} reps, {}", (w * h) as f64 / 1e6, reps, if b.gpu.is_some() { "GPU canvas" } else { "CPU canvas" });
 

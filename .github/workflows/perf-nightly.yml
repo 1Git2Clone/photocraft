@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
       update_baseline:
-        description: "Also write perf/baseline.json from this run (uploaded as an artifact, not committed)"
+        description: "Also write perf/baseline-<os>.json from this run (uploaded as artifacts, not committed)"
         type: boolean
         default: false
 

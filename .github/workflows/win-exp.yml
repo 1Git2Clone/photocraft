@@ -1,0 +1,101 @@
+name: Windows CI experiment
+
+# Scratch workflow (fork only): times variants of ci.yml's Windows test job side by side.
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+jobs:
+  test:
+    name: win (${{ matrix.v }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        v: [base, noex, nextest, lld, devdrive, all]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Probe runner
+        shell: pwsh
+        run: |
+          Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | Format-List
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
+          "cores: $env:NUMBER_OF_PROCESSORS"
+
+      - uses: actions/checkout@v4
+
+      - name: Dev Drive
+        if: matrix.v == 'devdrive' || matrix.v == 'all'
+        uses: samypr100/setup-dev-drive@v3
+        with:
+          drive-size: 60GB
+          workspace-copy: true
+          env-mapping: |
+            CARGO_HOME,{{ DEV_DRIVE }}/.cargo
+            RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
+
+      - name: Pick workspace
+        run: |
+          ws="${DEV_DRIVE_WORKSPACE:-$GITHUB_WORKSPACE}"
+          echo "WS=$ws" >> "$GITHUB_ENV"
+          echo "workspace: $ws"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: exp-${{ matrix.v }}
+          workspaces: ${{ env.WS }} -> target
+          cache-on-failure: true
+
+      - name: rust-lld linker
+        if: matrix.v == 'lld' || matrix.v == 'all'
+        working-directory: ${{ env.WS }}
+        run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
+
+      - name: Install nextest
+        if: matrix.v == 'nextest' || matrix.v == 'all'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Build
+        working-directory: ${{ env.WS }}
+        run: |
+          sel=()
+          if [ "${{ matrix.v }}" != base ] && [ "${{ matrix.v }}" != lld ] && [ "${{ matrix.v }}" != devdrive ]; then sel=(--lib --bins --tests); fi
+          cargo test --workspace --locked --features heif "${sel[@]}" --no-run --timings
+
+      - name: Run tests
+        working-directory: ${{ env.WS }}
+        run: |
+          case "${{ matrix.v }}" in
+            base|lld|devdrive) cargo test --workspace --locked --features heif ;;
+            noex) cargo test --workspace --locked --features heif --lib --bins --tests ;;
+            nextest|all) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
+          esac
+
+      - name: Doc tests
+        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive'
+        working-directory: ${{ env.WS }}
+        run: cargo test --workspace --locked --features heif --doc
+
+      - name: Clippy
+        working-directory: ${{ env.WS }}
+        run: cargo clippy --workspace --all-targets --locked --features heif -- -D warnings
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timings-${{ matrix.v }}
+          path: ${{ env.WS }}/target/cargo-timings/cargo-timing.html
+          if-no-files-found: warn

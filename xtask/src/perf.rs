@@ -620,6 +620,18 @@ pub fn updated_baseline(old: Option<&Value>, results: &Value) -> Value {
     json!({"schema": 1, "machine_class": class, "machine": results.get("machine"), "modes": modes})
 }
 
+/// A machine is too busy to judge regressions when its 1-minute load average, at the start or
+/// the end of the run, exceeds this many runnable tasks per core.
+pub const BUSY_LOAD_PER_CORE: f64 = 4.0;
+
+/// `Some(why)` when the load says other work was competing for the CPU during the run.
+pub fn machine_busy(loads: &[Option<[f64; 3]>], cores: Option<u64>) -> Option<String> {
+    let cores = cores.filter(|c| *c > 0)?;
+    let peak = loads.iter().flatten().map(|l| l[0]).fold(f64::NAN, f64::max);
+    (peak.is_finite() && peak > BUSY_LOAD_PER_CORE * cores as f64)
+        .then(|| format!("machine busy (load {peak:.1} on {cores} cores): regressions are reported, not failed"))
+}
+
 /// `--baseline` with `{class}` replaced by the machine class (one baseline file per class).
 pub fn baseline_path(pattern: &str, class: &str) -> String {
     pattern.replace("{class}", class)
@@ -860,7 +872,20 @@ pub fn run(root: &Path, rest: &[&str]) -> Result<(), String> {
             (sc.id.clone(), v)
         })
         .collect();
-    let failures: Vec<String> = outcomes.iter().filter(|o| o.status.fails()).map(|o| format!("{} {}: {}", o.id, o.title, o.status.label())).collect();
+    // A host busy with other work slows every scenario at once (a shared CI VM at load 36 on 3
+    // cores read +17..+1040 % on 39 scenarios): regressions are then reported, not failures.
+    let cores = m.get("cores").and_then(Value::as_u64);
+    let busy = machine_busy(&[load_start, load_end], cores);
+    let baseline_note = match (busy.clone(), baseline_note) {
+        (Some(why), Some(n)) => Some(format!("{n}; {why}")),
+        (Some(why), None) => Some(why),
+        (None, n) => n,
+    };
+    let failures: Vec<String> = outcomes
+        .iter()
+        .filter(|o| o.status.fails() && !(busy.is_some() && o.status == Status::Regressed))
+        .map(|o| format!("{} {}: {}", o.id, o.title, o.status.label()))
+        .collect();
     let bench_failures: Vec<String> = reports.iter().filter_map(|(n, r)| r.as_ref().err().map(|e| format!("bench {n}: {e}"))).collect();
     let commit = git(root, &["rev-parse", "HEAD"]);
     let dirty = git(root, &["status", "--porcelain"]).is_some_and(|s| !s.is_empty());
@@ -1158,6 +1183,11 @@ not_measurable = "needs a frame harness"
         assert!(!o.advisory_budgets && parse_opts(&["--advisory-budgets"]).unwrap().advisory_budgets);
         assert!(parse_opts(&["--baseline"]).is_err());
         assert!(!o.cpu && parse_opts(&["--cpu"]).unwrap().cpu);
+        // The noisy macOS run (load 35.9 at the start on 3 cores) is busy; a normal one (7.4) isn't.
+        assert!(machine_busy(&[Some([35.9, 36.9, 33.8]), Some([17.4, 18.8, 24.4])], Some(3)).is_some());
+        assert!(machine_busy(&[Some([7.4, 12.6, 15.2]), Some([6.9, 11.5, 13.9])], Some(3)).is_none());
+        assert!(machine_busy(&[None, None], Some(3)).is_none(), "no load average (Windows): never busy");
+        assert!(machine_busy(&[Some([99.0, 0.0, 0.0])], None).is_none());
         assert_eq!(baseline_path("perf/baselines/{class}.json", "linux-x86-64-epyc"), "perf/baselines/linux-x86-64-epyc.json");
         assert_eq!(baseline_path(BASELINE, "linux-x86-64-epyc"), BASELINE);
         assert_eq!(parse_opts(&["--baseline", "perf/baseline-linux.json"]).unwrap().baseline, "perf/baseline-linux.json");

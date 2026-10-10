@@ -2,7 +2,7 @@
 //! by scenario id, and check it against `perf/budgets.toml` and `perf/baseline.json` (#221).
 //!
 //! ```text
-//! cargo xtask perf [--quick] [--update-baseline] [--baseline PATH] [--advisory-budgets] [--threshold PCT] [--bench NAME]... [--skip-bench NAME]... [--skip-build] [--reuse]
+//! cargo xtask perf [--quick] [--update-baseline] [--baseline PATH] [--advisory-budgets] [--threshold PCT] [--bench NAME]... [--cpu] [--skip-build] [--reuse]
 //! ```
 //!
 //! - `--quick`: only the benches with `quick_args` (small synthetic documents; minutes, not tens
@@ -14,8 +14,9 @@
 //! - `--advisory-budgets`: a broken enforced budget is reported, not a failure (CI runners are
 //!   slower than the machine the budgets were set on; only regressions fail there).
 //! - `--threshold PCT`: the regression threshold (default `settings.regression_pct`, 15 %).
-//! - `--bench NAME`: run only these benches (repeatable). `--skip-bench NAME`: don't run this bench
-//!   (repeatable); its scenarios read "not run" (CI runners whose software GPU can't run it).
+//! - `--bench NAME`: run only these benches (repeatable).
+//! - `--cpu`: CPU canvas only: benches with `cpu_args` get them, the others are skipped (their
+//!   scenarios read "not run"). For runners whose only GPU is a slow software one (WARP).
 //! - `--skip-build`: don't run `cargo build` first. `--reuse`: don't run the benches either;
 //!   re-evaluate the reports already in `target/perf/`.
 //!
@@ -79,6 +80,8 @@ pub struct BenchSpec {
     pub args: Vec<String>,
     /// Arguments of a `--quick` run; absent = the bench is skipped in quick mode.
     pub quick_args: Option<Vec<String>>,
+    /// Arguments added in `--cpu` mode (e.g. `["--cpu"]`); absent = the bench is skipped there.
+    pub cpu_args: Option<Vec<String>>,
     /// Source file that must exist for the bench to run (a bench that lives on another branch):
     /// skipped, not failed, while it is missing.
     pub requires: Option<String>,
@@ -626,7 +629,7 @@ struct Opts {
     reuse: bool,
     baseline: String,
     advisory_budgets: bool,
-    skip_benches: Vec<String>,
+    cpu: bool,
 }
 
 fn parse_opts(rest: &[&str]) -> Result<Opts, String> {
@@ -639,7 +642,7 @@ fn parse_opts(rest: &[&str]) -> Result<Opts, String> {
         reuse: false,
         baseline: BASELINE.into(),
         advisory_budgets: false,
-        skip_benches: Vec::new(),
+        cpu: false,
     };
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -656,7 +659,7 @@ fn parse_opts(rest: &[&str]) -> Result<Opts, String> {
                 let v = it.next().and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite() && *v > 0.0).ok_or("--threshold needs a percentage > 0")?;
                 o.threshold = Some(v);
             }
-            "--skip-bench" => o.skip_benches.push(it.next().ok_or("--skip-bench needs a name")?.to_string()),
+            "--cpu" => o.cpu = true,
             "--bench" => o.benches.push(it.next().ok_or("--bench needs a name")?.to_string()),
             "--baseline" => o.baseline = it.next().ok_or("--baseline needs a path")?.to_string(),
             other => return Err(format!("perf: unknown option `{other}`")),
@@ -693,11 +696,7 @@ pub fn run(root: &Path, rest: &[&str]) -> Result<(), String> {
         if !o.benches.is_empty() && !o.benches.contains(&b.name) {
             continue;
         }
-        if o.skip_benches.contains(&b.name) {
-            skipped.push((b.name.clone(), "--skip-bench".into()));
-            continue;
-        }
-        let args = if o.quick {
+        let mut args = if o.quick {
             match &b.quick_args {
                 Some(a) => a.clone(),
                 None => continue,
@@ -705,6 +704,15 @@ pub fn run(root: &Path, rest: &[&str]) -> Result<(), String> {
         } else {
             b.args.clone()
         };
+        if o.cpu {
+            match &b.cpu_args {
+                Some(a) => args.extend(a.iter().cloned()),
+                None => {
+                    skipped.push((b.name.clone(), "no cpu_args: not run with --cpu".into()));
+                    continue;
+                }
+            }
+        }
         if let Some(req) = &b.requires
             && !root.join(req).exists()
         {
@@ -1137,8 +1145,7 @@ not_measurable = "needs a frame harness"
         assert_eq!(o.baseline, BASELINE);
         assert!(!o.advisory_budgets && parse_opts(&["--advisory-budgets"]).unwrap().advisory_budgets);
         assert!(parse_opts(&["--baseline"]).is_err());
-        assert!(parse_opts(&["--skip-bench"]).is_err());
-        assert_eq!(parse_opts(&["--skip-bench", "fx_bench"]).unwrap().skip_benches, ["fx_bench"]);
+        assert!(!o.cpu && parse_opts(&["--cpu"]).unwrap().cpu);
         assert_eq!(parse_opts(&["--baseline", "perf/baseline-linux.json"]).unwrap().baseline, "perf/baseline-linux.json");
     }
 }

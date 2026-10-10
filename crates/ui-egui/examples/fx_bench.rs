@@ -54,8 +54,7 @@ fn is_software_renderer(name: &str) -> bool {
         || n.contains("swiftshader")
         || n.contains("microsoft basic render")
         || n.contains("software rasterizer")
-        || n.contains("software")
-            && (n.contains("renderer") || n.contains("adapter") || n.contains("gpu"))
+        || n.contains("software") && (n.contains("renderer") || n.contains("adapter") || n.contains("gpu"))
 }
 
 fn effects() -> Vec<Effect> {

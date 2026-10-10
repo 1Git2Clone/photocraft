@@ -13,6 +13,14 @@
 //! recomposite (the canvas samples the composited texture's mip levels); "viewport (CPU)" times
 //! what the CPU fallback pays for one 1920×1080 view. Each row is the median of `--reps` runs
 //! (min / max shown); the first run of an operation is reported separately as "cold".
+//!
+//! Software-renderer adapters (llvmpipe on Linux, Microsoft Basic Render Driver on Windows,
+//! SwiftShader) reject the GPU compositor's `Rgba32Float` render targets / uniform buffers, so
+//! the bench's `gpu.comp.render` calls panic the process with exit status 101. `gpu()` detects
+//! them by name and returns `None`; with no working GPU on a host that has no real adapter the
+//! bench has no GPU paths to time, so it writes a "skipped" JSON report (`context.skipped` set)
+//! and exits 0. The perf runner treats that as P40–P46 being not measurable on this host
+//! instead of failing the bench and every tied scenario.
 
 use std::time::Instant;
 
@@ -37,6 +45,21 @@ fn block_on<F: std::future::Future>(f: F) -> F::Output {
     }
 }
 
+/// Software (CPU) GPU adapters reject `Rgba32Float` render targets and the uniform-buffer
+/// layouts the GPU compositor needs. They appear in CI as llvmpipe on Linux (`ubuntu-latest`
+/// runners, no GPU) and the Microsoft Basic Render Driver on Windows (`windows-latest` runners).
+/// SwiftShader shows up under some sandboxes. Matched case-insensitively against
+/// `AdapterInfo::name`; the list stays small on purpose.
+fn is_software_renderer(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    n.contains("llvmpipe")
+        || n.contains("swiftshader")
+        || n.contains("microsoft basic render")
+        || n.contains("software rasterizer")
+        || n.contains("software")
+            && (n.contains("renderer") || n.contains("adapter") || n.contains("gpu"))
+}
+
 struct Gpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -48,7 +71,15 @@ fn gpu() -> Option<Gpu> {
     let adapter =
         block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
             .ok()?;
-    eprintln!("adapter: {}", adapter.get_info().name);
+    let info = adapter.get_info();
+    eprintln!("adapter: {}", info.name);
+    if is_software_renderer(&info.name) {
+        eprintln!(
+            "adapter `{}` is a software renderer; the GPU compositor can't run here, so the\ninteractive_bench GPU scenarios are not measurable on this host. P40–P46 will be reported\nas `not measurable` by the perf runner.",
+            info.name
+        );
+        return None;
+    }
     // The limits the app requests (see `gpu_canvas::use_adapter_limits`).
     let limits = photocraft_ui_egui::gpu_canvas::device_limits(&adapter);
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_limits: limits, ..Default::default() })).ok()?;
@@ -87,6 +118,10 @@ struct Bench {
     /// `--json` (`cargo xtask perf`).
     extra: Vec<(Vec<f64>, Option<u64>)>,
     rss: photocraft_testkit::perf::RssSampler,
+    /// `info.name` of the GPU adapter, or `None` if no adapter / software renderer / device
+    /// creation failed. Surfaces in the JSON `context.gpu_adapter` (and in `context.skipped`
+    /// when the bench exits early because there is no working GPU).
+    adapter: Option<String>,
 }
 
 impl Bench {
@@ -172,13 +207,63 @@ fn main() {
     let (w, h) =
         arg(&args, "--size").and_then(|s| s.split_once('x').map(|(a, b)| (a.parse().unwrap_or(7360), b.parse().unwrap_or(4912)))).unwrap_or((7360, 4912));
     let reps: usize = arg(&args, "--reps").and_then(|v| v.parse().ok()).unwrap_or(5).max(1);
+    let force_cpu = args.iter().any(|a| a == "--cpu");
+
+    // Resolve the GPU up front: detect software renderers (CI on Linux/Windows), record the
+    // adapter name for the report, and decide whether we have anything GPU-side to time.
+    let g = if force_cpu { None } else { gpu() };
+    let adapter = g.as_ref().map(|_| "see adapter: line above".to_string());
+    // adapter is captured in `Bench` so the JSON can include it.
+
+    // If the perf runner asked for a --json report and we have no GPU on a software renderer,
+    // the GPU scenarios can't run here: write a skipped report and exit cleanly. CPU-only
+    // hosts (no adapter at all) and the explicit --cpu path both fall through to the main
+    // bench loop, which is happy on the CPU path.
+    if g.is_none() && !force_cpu {
+        // Re-derive the adapter name to put in the report.
+        let adapter_name = {
+            let instance = wgpu::Instance::default();
+            block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
+                .ok()
+                .map(|a| a.get_info().name)
+        };
+        let reason = match adapter_name.as_deref() {
+            Some(name) if is_software_renderer(name) => format!(
+                "GPU adapter `{name}` is a software renderer; the GPU compositor's `Rgba32Float` render targets and uniform-buffer layouts aren't supported there, so P40–P46 are not measurable on this host. See crates/ui-egui/examples/interactive_bench.rs:is_software_renderer."
+            ),
+            Some(name) => format!("GPU adapter `{name}` did not accept a device with the app's required limits; P40–P46 are not measurable on this host."),
+            None => "no GPU adapter available; P40–P46 are not measurable on this host.".into(),
+        };
+        eprintln!("interactive_bench: {reason}");
+        eprintln!("interactive_bench: the GPU is not usable on this host. Writing a skipped report.");
+        if let Some(out) = arg(&args, "--json") {
+            let report = json!({
+                "name": "interactive_bench",
+                "context": {
+                    "skipped": reason,
+                    "width": w,
+                    "height": h,
+                    "gpu": false,
+                    "gpu_adapter": adapter_name,
+                },
+                "rows": [],
+            });
+            if let Err(e) = std::fs::write(&out, serde_json::to_string_pretty(&report).unwrap()) {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     let mut b = Bench {
-        gpu: if args.iter().any(|a| a == "--cpu") { None } else { gpu() },
+        gpu: g,
         reps,
         only: arg(&args, "--only"),
         rows: Vec::new(),
         extra: Vec::new(),
         rss: photocraft_testkit::perf::RssSampler::start(std::time::Duration::from_millis(2)),
+        adapter,
     };
     println!("document {w}×{h} ({:.1} MP), 8-bit RGB, {} reps, {}", (w * h) as f64 / 1e6, reps, if b.gpu.is_some() { "GPU canvas" } else { "CPU canvas" });
 
@@ -237,7 +322,7 @@ fn main() {
     // ---- filters / adjustments / layers ------------------------------------------------------
     select(&mut s, 0);
     for radius in [4.0, 40.0, 250.0] {
-        b.time(&format!("Gaussian Blur r {radius} (photo layer) + refresh"), |b| {
+        b.time(format!("Gaussian Blur r {radius} (photo layer) + refresh"), |b| {
             let t = Instant::now();
             exec(&mut s, "filter.blur.gaussianBlur", json!({"radius": radius}));
             let v = ms(t) + b.refresh(&s, false);
@@ -249,7 +334,7 @@ fn main() {
     // Filter dialog live preview, per radius change (#464): the command on the proxy plus its
     // flatten for upload.
     for radius in [40.0, 250.0] {
-        b.time(&format!("Gaussian Blur dialog preview r {radius}"), |_| {
+        b.time(format!("Gaussian Blur dialog preview r {radius}"), |_| {
             let st = s.active().expect("doc");
             let k = photocraft_ui_egui::proxy::factor(&st.doc);
             let t = Instant::now();
@@ -268,7 +353,7 @@ fn main() {
         }
         let sel = if selection { ", selection" } else { "" };
         let mut v = 0;
-        b.time(&format!("Curves dialog change, CPU proxy preview{sel}"), |_| {
+        b.time(format!("Curves dialog change, CPU proxy preview{sel}"), |_| {
             v = (v + 7) % 120;
             let st = s.active().expect("doc");
             let k = photocraft_ui_egui::proxy::factor(&st.doc);
@@ -294,7 +379,7 @@ fn main() {
             println!("  (layer preview session setup: {:.1} ms, region {region:?})", ms(t));
             (base, region)
         };
-        b.time(&format!("Curves dialog change, layer preview{sel}"), |b| {
+        b.time(format!("Curves dialog change, layer preview{sel}"), |b| {
             v = (v + 7) % 120;
             let t = Instant::now();
             let p =
@@ -317,7 +402,7 @@ fn main() {
         // Zoomed in, the canvas composites the region's visible part (here a 2560×1440 view at
         // 100 %) and catches up elsewhere when the view moves.
         let view = Rect::from_xywh(w as i32 / 3, h as i32 / 3, 2560, 1440).intersect(&region);
-        b.time(&format!("Curves dialog change, layer preview 100 % view{sel}"), |b| {
+        b.time(format!("Curves dialog change, layer preview 100 % view{sel}"), |b| {
             v = (v + 7) % 120;
             let t = Instant::now();
             let p =
@@ -344,7 +429,7 @@ fn main() {
         println!("  (zoomed-out proxy k {k} setup: {:.1} ms)", ms(t));
         let kk = k as i32;
         let pregion = Rect::new(region.x0 / kk, region.y0 / kk, region.x1 / kk + 1, region.y1 / kk + 1).intersect(&proxy.bounds());
-        b.time(&format!("Curves dialog change, layer preview zoomed out{sel}"), |b| {
+        b.time(format!("Curves dialog change, layer preview zoomed out{sel}"), |b| {
             v = (v + 7) % 120;
             let t = Instant::now();
             let p = photocraft_ui_egui::adjust_preview::proxy_with_settings(&proxy, "curves", &json!({"points": [[0, 0], [100, 100 + v], [255, 255]]}))

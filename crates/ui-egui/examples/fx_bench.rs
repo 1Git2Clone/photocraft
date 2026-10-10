@@ -9,6 +9,14 @@
 //! refresh (cold and warm effect caches) and the incremental cases the canvas sees: an adjustment
 //! tweak (full refresh, maps cached), a brush dab on a plain layer and a brush dab on the effect
 //! layer (damage rect grown by the effect reach). `--psd` times a real file instead.
+//!
+//! Software-renderer adapters (llvmpipe on Linux, Microsoft Basic Render Driver on Windows,
+//! SwiftShader) reject `Rgba32Float` render targets and uniform buffers the GPU compositor needs,
+//! so the per-case `render` calls panic the bench with exit status 101. `gpu()` detects them by
+//! name and returns `None`; with `--no-cpu` (used by the perf nightly) and no GPU we have nothing
+//! to time, so the bench writes a "skipped" JSON report (`context.skipped` set) and exits 0. The
+//! perf runner treats that as the GPU scenarios being not measurable on this host, instead of
+//! failing the bench and every tied scenario.
 
 use std::time::Instant;
 
@@ -33,6 +41,21 @@ fn block_on<F: std::future::Future>(f: F) -> F::Output {
         }
         std::thread::yield_now();
     }
+}
+
+/// Software (CPU) GPU adapters lack `Rgba32Float` render targets / filtering and reject the
+/// uniform-buffer layouts the GPU compositor uses. They appear in CI as llvmpipe on Linux
+/// (`ubuntu-latest` runners, no GPU) and the Microsoft Basic Render Driver on Windows
+/// (`windows-latest` runners). SwiftShader shows up under some sandboxes. The list is matched
+/// case-insensitively against `AdapterInfo::name`; it stays small on purpose.
+fn is_software_renderer(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    n.contains("llvmpipe")
+        || n.contains("swiftshader")
+        || n.contains("microsoft basic render")
+        || n.contains("software rasterizer")
+        || n.contains("software")
+            && (n.contains("renderer") || n.contains("adapter") || n.contains("gpu"))
 }
 
 fn effects() -> Vec<Effect> {
@@ -138,12 +161,20 @@ fn gpu() -> Option<Gpu> {
     let adapter =
         block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
             .ok()?;
-    eprintln!("adapter: {:?}", adapter.get_info().name);
+    let info = adapter.get_info();
+    eprintln!("adapter: {}", info.name);
+    if is_software_renderer(&info.name) {
+        eprintln!(
+            "adapter `{}` is a software renderer; the GPU compositor can't run here, so the\nfx_bench GPU scenarios are not measurable on this host. P40–P46 will be reported as\n`not measurable` by the perf runner.",
+            info.name
+        );
+        return None;
+    }
     // The limits the app requests (see `gpu_canvas::use_adapter_limits`).
     let limits = photocraft_ui_egui::gpu_canvas::device_limits(&adapter);
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_limits: limits, ..Default::default() })).ok()?;
     let comp = photocraft_gpu::Compositor::new(&device);
-    Some(Gpu { device, queue, comp, adapter: adapter.get_info().name })
+    Some(Gpu { device, queue, comp, adapter: info.name })
 }
 
 fn gpu_time(g: &mut Gpu, doc: &Document, region: Rect) -> Result<f64, String> {
@@ -229,6 +260,41 @@ fn main() {
     println!("document {}x{} ({} layers)", doc.size.width, doc.size.height, doc.walk().len());
     let mut g = gpu();
     let adapter = g.as_ref().map(|g| g.adapter.clone());
+
+    // --no-cpu with no working GPU (software renderer or no adapter at all): the per-case
+    // calls would all be "no adapter" errors and produce a useless report. The perf runner
+    // matches `context.skipped` and marks every tied scenario as not measurable instead of
+    // missing, so the nightly doesn't fail on hosts that have no real GPU (CI's Linux and
+    // Windows runners fall through this path).
+    if g.is_none() && no_cpu {
+        let reason = match adapter.as_deref() {
+            Some(name) if is_software_renderer(name) => format!(
+                "GPU adapter `{name}` is a software renderer; the GPU compositor's `Rgba32Float` render targets and uniform-buffer layouts aren't supported there, so P40–P46 are not measurable on this host. See crates/ui-egui/examples/fx_bench.rs:is_software_renderer."
+            ),
+            Some(name) => format!("GPU adapter `{name}` did not accept a device with the app's required limits; P40–P46 are not measurable on this host."),
+            None => "no GPU adapter available; P40–P46 are not measurable on this host.".into(),
+        };
+        eprintln!("fx_bench: {reason}");
+        eprintln!("fx_bench: --no-cpu was set and the GPU is not usable, so the bench has nothing to time. Writing a skipped report.");
+        if let Some(out) = arg(&args, "--json") {
+            let report = json!({
+                "name": "fx_bench",
+                "context": {
+                    "skipped": reason,
+                    "width": doc.size.width,
+                    "height": doc.size.height,
+                    "gpu_adapter": adapter,
+                },
+                "rows": [],
+            });
+            if let Err(e) = std::fs::write(&out, serde_json::to_string_pretty(&report).unwrap()) {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     let mut gt = |doc: &Document, r: Rect| match g.as_mut() {
         Some(g) => gpu_time(g, doc, r),
         None => Err("no adapter".into()),

@@ -250,6 +250,21 @@ pub fn find_row<'a>(report: &'a Value, name: &str) -> Option<&'a Value> {
     report.get("rows")?.as_array()?.iter().find(|r| r.get("name").and_then(Value::as_str) == Some(name))
 }
 
+/// The reason a bench recorded itself as skipped (its `context.skipped` field). Benches write
+/// this when their environment can't run them at all — for example `fx_bench` and
+/// `interactive_bench` on a software-renderer host (llvmpipe on Linux, Microsoft Basic Render
+/// Driver on Windows): the GPU compositor's `Rgba32Float` render targets / uniform-buffer
+/// layouts aren't supported there, and the perf runner would otherwise treat the panic exit
+/// as a bench failure that fails every tied scenario. The runner reads this field and marks
+/// the tied scenarios as `NotMeasurable(reason)` instead of `Missing`.
+pub fn bench_skipped_reason(report: &Value) -> Option<String> {
+    report
+        .get("context")
+        .and_then(|c| c.get("skipped"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
 /// `cur` regressed against `base` by more than `pct` % and more than `min_ms`.
 pub fn regressed(cur: f64, base: f64, pct: f64, min_ms: f64) -> bool {
     base > 0.0 && cur.is_finite() && cur > base * (1.0 + pct / 100.0) && cur - base > min_ms
@@ -359,25 +374,35 @@ pub fn evaluate(
             match reports.get(bench) {
                 None => {}
                 Some(Err(e)) => o.status = Status::Missing(format!("bench `{bench}` failed: {e}")),
-                Some(Ok(rep)) => match find_row(rep, row) {
-                    None => {
-                        let err = rep
-                            .get("context")
-                            .and_then(|c| c.get("errors"))
-                            .and_then(Value::as_array)
-                            .and_then(|a| a.iter().find(|e| e.get("name").and_then(Value::as_str) == Some(row.as_str())))
-                            .and_then(|e| e.get("error"))
-                            .and_then(Value::as_str)
-                            .map_or_else(|| format!("row `{row}` not in `{bench}`"), str::to_string);
-                        o.status = Status::Missing(err);
+                Some(Ok(rep)) => {
+                    // The bench itself is fine but its environment can't run the GPU scenarios
+                    // (software renderer, missing adapter, etc.) — see `bench_skipped_reason`.
+                    // Tied scenarios become `NotMeasurable` rather than `Missing`, so the
+                    // nightly doesn't fail on a host that has no real GPU.
+                    if let Some(reason) = bench_skipped_reason(rep) {
+                        o.status = Status::NotMeasurable(reason);
+                    } else {
+                        match find_row(rep, row) {
+                            None => {
+                                let err = rep
+                                    .get("context")
+                                    .and_then(|c| c.get("errors"))
+                                    .and_then(Value::as_array)
+                                    .and_then(|a| a.iter().find(|e| e.get("name").and_then(Value::as_str) == Some(row.as_str())))
+                                    .and_then(|e| e.get("error"))
+                                    .and_then(Value::as_str)
+                                    .map_or_else(|| format!("row `{row}` not in `{bench}`"), str::to_string);
+                                o.status = Status::Missing(err);
+                            }
+                            Some(r) => {
+                                let st = row_stats(r);
+                                o.change_pct = st.p50.zip(o.baseline_p50).and_then(|(c, b)| change_pct(c, b));
+                                o.status = verdict(sc, &st, base, &budgets.settings, threshold, budgets_apply);
+                                o.stats = Some(st);
+                            }
+                        }
                     }
-                    Some(r) => {
-                        let st = row_stats(r);
-                        o.change_pct = st.p50.zip(o.baseline_p50).and_then(|(c, b)| change_pct(c, b));
-                        o.status = verdict(sc, &st, base, &budgets.settings, threshold, budgets_apply);
-                        o.stats = Some(st);
-                    }
-                },
+                }
             }
             o
         })
@@ -726,10 +751,17 @@ pub fn run(root: &Path, rest: &[&str]) -> Result<(), String> {
         };
         let parsed = result.and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| format!("{}: bad JSON: {e}", b.name)));
         let after = load_avg();
+        let bench_status = match &parsed {
+            Ok(v) if bench_skipped_reason(v).is_some() => "skipped",
+            Ok(_) => "ok",
+            Err(_) => "error",
+        };
+        let skipped_reason = parsed.as_ref().ok().and_then(bench_skipped_reason);
         bench_meta.insert(
             b.name.clone(),
             json!({
-                "status": if parsed.is_ok() { "ok" } else { "error" },
+                "status": bench_status,
+                "skipped": skipped_reason,
                 "note": b.note,
                 "error": parsed.as_ref().err(),
                 "seconds": t.elapsed().as_secs_f64(),
@@ -1092,6 +1124,45 @@ not_measurable = "needs a frame harness"
         assert!(t.contains("**Not measurable yet**"));
         assert!(t.contains("| P3 | zoom | ≤ 16 ms per frame | needs a frame harness |  |"));
         assert_eq!(counts(&evaluate(&b, &reports, None, 15.0, true)), (1, 1, 0, 1), "the row the bench lacks counts as failing");
+    }
+
+    #[test]
+    fn evaluate_marks_skipped_bench_as_not_measurable() {
+        // A bench that recorded itself as skipped (e.g. software-renderer host + --no-cpu)
+        // makes every tied scenario not measurable, not missing. The nightly depends on this:
+        // without it, the perf job fails on Linux/Windows CI runners.
+        let b = parse_budgets(TOML).unwrap();
+        let mut reports = BTreeMap::new();
+        reports.insert(
+            "b".to_string(),
+            Ok(json!({
+                "name": "b",
+                "context": {
+                    "skipped": "GPU adapter `llvmpipe` is a software renderer; the GPU compositor can't run here",
+                },
+                "rows": [],
+            })),
+        );
+        let out = evaluate(&b, &reports, None, 15.0, true);
+        assert!(matches!(&out[0].status, Status::NotMeasurable(w) if w.contains("llvmpipe")));
+        assert!(!out[0].status.fails(), "skipped benches must not fail scenarios");
+        assert!(matches!(&out[1].status, Status::NotMeasurable(_)));
+        // P3 is `not_measurable` in the TOML and stays so.
+        assert!(matches!(&out[2].status, Status::NotMeasurable(w) if w == "needs a frame harness"));
+        // bench_skipped_reason extracts the reason.
+        let r = reports.get("b").and_then(|r| r.as_ref().ok()).unwrap();
+        assert_eq!(
+            bench_skipped_reason(r).as_deref(),
+            Some("GPU adapter `llvmpipe` is a software renderer; the GPU compositor can't run here")
+        );
+        // Without a `skipped` field, the same report is a normal bench: missing rows still
+        // fail their scenarios.
+        reports.insert(
+            "b".to_string(),
+            Ok(json!({"rows": []})),
+        );
+        let out = evaluate(&b, &reports, None, 15.0, true);
+        assert!(matches!(&out[0].status, Status::Missing(_)));
     }
 
     #[test]

@@ -4,6 +4,8 @@ name: Windows CI experiment
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ci-windows-exp]
 
 env:
   CARGO_TERM_COLOR: always

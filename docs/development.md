@@ -320,7 +320,8 @@ Apple silicon, Linux x86-64, Windows x86-64), posts each table as its job summar
 `results.json`, and fails on a failed bench or a regression (budgets are reported, not enforced,
 there: `--advisory-budgets`, since they were set on a faster machine). Each entry compares only with its own
 baseline, `perf/baseline-<os>.json` (`--baseline PATH`), recorded on that runner; hosted Linux and
-Windows runners have no real GPU, so their GPU rows run on a software adapter (llvmpipe, WARP). It never runs on
+Windows runners have no real GPU, so their GPU rows run on a software adapter (llvmpipe, WARP; Windows skips the benches WARP
+loses the device on, `--skip-bench`). It never runs on
 pull requests: the release build of the benches alone takes longer than PR CI should. To record
 the runner baselines, run the workflow by hand with `update_baseline` and commit each
 `perf-baseline-<os>` artifact as `perf/baseline-<os>.json`.

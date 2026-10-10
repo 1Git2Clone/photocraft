@@ -308,7 +308,9 @@ breaks, when a scenario's p50 regresses more than 15 % (`--threshold`, or `regre
 against a baseline from the same machine class and mode, or when a bench fails. Runs from
 different machine classes are never compared, and `--quick` numbers are only compared with a
 quick baseline. Machines that run other work give noisy numbers: check the load average in the
-summary before trusting a regression, and record it next to any number you quote.
+summary before trusting a regression, and record it next to any number you quote. When the
+1-minute load at the start or end of the run exceeds 4 per core, regressions are reported but
+don't fail the run (the summary says the machine was busy).
 
 **Adding a scenario.** Add a row to a bench (keep its name stable: it is the key), give the
 bench `--json` support through `photocraft_testkit::perf::{row, report, write_report}`, then add a
@@ -317,8 +319,10 @@ bench `--json` support through `photocraft_testkit::perf::{row, report, write_re
 **CI.** `ci.yml` runs `cargo xtask scorecard --check`. `perf-nightly.yml` runs `cargo xtask perf`
 every night (and on demand) as a three-entry matrix of pinned GitHub-hosted runners (macOS
 Apple silicon, Linux x86-64, Windows x86-64), posts each table as its job summary, uploads
-`results.json`, and fails on a failed bench or a regression (budgets are reported, not enforced,
-there: `--advisory-budgets`, since they were set on a faster machine). Each entry compares only with the
+`results.json`, and fails on a failed bench or a regression over 25 % (`--threshold 25`) that a
+retry of the benches confirms (budgets are reported, not enforced, there: `--advisory-budgets`,
+since they were set on a faster machine). Shared hosted VMs only catch notable regressions;
+for accurate numbers, benchmark locally or on a dedicated runner. Each entry compares only with the
 baseline of its machine class, `perf/baselines/<class>.json` (`--baseline 'perf/baselines/{class}.json'`):
 hosted runners rotate CPU models, and each CPU is its own class. Hosted Linux and
 Windows runners have no hardware GPU (their software ones, llvmpipe and WARP, take seconds per

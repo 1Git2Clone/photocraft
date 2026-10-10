@@ -258,11 +258,7 @@ pub fn find_row<'a>(report: &'a Value, name: &str) -> Option<&'a Value> {
 /// as a bench failure that fails every tied scenario. The runner reads this field and marks
 /// the tied scenarios as `NotMeasurable(reason)` instead of `Missing`.
 pub fn bench_skipped_reason(report: &Value) -> Option<String> {
-    report
-        .get("context")
-        .and_then(|c| c.get("skipped"))
-        .and_then(Value::as_str)
-        .map(str::to_string)
+    report.get("context").and_then(|c| c.get("skipped")).and_then(Value::as_str).map(str::to_string)
 }
 
 /// `cur` regressed against `base` by more than `pct` % and more than `min_ms`.
@@ -1151,16 +1147,10 @@ not_measurable = "needs a frame harness"
         assert!(matches!(&out[2].status, Status::NotMeasurable(w) if w == "needs a frame harness"));
         // bench_skipped_reason extracts the reason.
         let r = reports.get("b").and_then(|r| r.as_ref().ok()).unwrap();
-        assert_eq!(
-            bench_skipped_reason(r).as_deref(),
-            Some("GPU adapter `llvmpipe` is a software renderer; the GPU compositor can't run here")
-        );
+        assert_eq!(bench_skipped_reason(r).as_deref(), Some("GPU adapter `llvmpipe` is a software renderer; the GPU compositor can't run here"));
         // Without a `skipped` field, the same report is a normal bench: missing rows still
         // fail their scenarios.
-        reports.insert(
-            "b".to_string(),
-            Ok(json!({"rows": []})),
-        );
+        reports.insert("b".to_string(), Ok(json!({"rows": []})));
         let out = evaluate(&b, &reports, None, 15.0, true);
         assert!(matches!(&out[0].status, Status::Missing(_)));
     }

@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        v: [base, noex, nextest, lld, devdrive, all]
+        v: [base, noex, nextest, lld, devdrive, all, mount, nodebug]
     defaults:
       run:
         shell: bash
@@ -43,6 +43,19 @@ jobs:
             CARGO_HOME,{{ DEV_DRIVE }}/.cargo
             RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
 
+      - name: Dev Drive at target/
+        if: matrix.v == 'mount' || matrix.v == 'nodebug'
+        uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
+        with:
+          drive-size: 64GB
+          drive-format: ReFS
+          mount-path: ${{ github.workspace }}/target
+          trusted-dev-drive: true
+
+      - name: No debuginfo
+        if: matrix.v == 'nodebug'
+        run: echo "CARGO_PROFILE_DEV_DEBUG=0" >> "$GITHUB_ENV"
+
       - name: Pick workspace
         run: |
           ws="${DEV_DRIVE_WORKSPACE:-$GITHUB_WORKSPACE}"
@@ -55,7 +68,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: exp-${{ matrix.v }}
+          key: exp-${{ matrix.v == 'mount' && 'nextest' || matrix.v }}
           workspaces: ${{ env.WS }} -> target
           cache-on-failure: true
 
@@ -65,7 +78,7 @@ jobs:
         run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
 
       - name: Install nextest
-        if: matrix.v == 'nextest' || matrix.v == 'all'
+        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'mount' || matrix.v == 'nodebug'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -83,7 +96,7 @@ jobs:
           case "${{ matrix.v }}" in
             base|lld|devdrive) cargo test --workspace --locked --features heif ;;
             noex) cargo test --workspace --locked --features heif --lib --bins --tests ;;
-            nextest|all) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
+            nextest|all|mount|nodebug) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
           esac
 
       - name: Doc tests
@@ -101,3 +114,8 @@ jobs:
           name: timings-${{ matrix.v }}
           path: ${{ env.WS }}/target/cargo-timings/cargo-timing.html
           if-no-files-found: warn
+
+      - name: List target (mount check)
+        if: always() && (matrix.v == 'mount' || matrix.v == 'nodebug')
+        shell: pwsh
+        run: Get-ChildItem -Force target | Select-Object Mode, Name | Format-Table

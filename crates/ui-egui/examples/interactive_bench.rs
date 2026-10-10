@@ -321,7 +321,7 @@ fn main() {
     // ---- filters / adjustments / layers ------------------------------------------------------
     select(&mut s, 0);
     for radius in [4.0, 40.0, 250.0] {
-        b.time(format!("Gaussian Blur r {radius} (photo layer) + refresh"), |b| {
+        b.time(&format!("Gaussian Blur r {radius} (photo layer) + refresh"), |b| {
             let t = Instant::now();
             exec(&mut s, "filter.blur.gaussianBlur", json!({"radius": radius}));
             let v = ms(t) + b.refresh(&s, false);
@@ -333,7 +333,7 @@ fn main() {
     // Filter dialog live preview, per radius change (#464): the command on the proxy plus its
     // flatten for upload.
     for radius in [40.0, 250.0] {
-        b.time(format!("Gaussian Blur dialog preview r {radius}"), |_| {
+        b.time(&format!("Gaussian Blur dialog preview r {radius}"), |_| {
             let st = s.active().expect("doc");
             let k = photocraft_ui_egui::proxy::factor(&st.doc);
             let t = Instant::now();
@@ -352,7 +352,7 @@ fn main() {
         }
         let sel = if selection { ", selection" } else { "" };
         let mut v = 0;
-        b.time(format!("Curves dialog change, CPU proxy preview{sel}"), |_| {
+        b.time(&format!("Curves dialog change, CPU proxy preview{sel}"), |_| {
             v = (v + 7) % 120;
             let st = s.active().expect("doc");
             let k = photocraft_ui_egui::proxy::factor(&st.doc);
@@ -378,7 +378,7 @@ fn main() {
             println!("  (layer preview session setup: {:.1} ms, region {region:?})", ms(t));
             (base, region)
         };
-        b.time(format!("Curves dialog change, layer preview{sel}"), |b| {
+        b.time(&format!("Curves dialog change, layer preview{sel}"), |b| {
             v = (v + 7) % 120;
             let t = Instant::now();
             let p =
@@ -401,7 +401,7 @@ fn main() {
         // Zoomed in, the canvas composites the region's visible part (here a 2560×1440 view at
         // 100 %) and catches up elsewhere when the view moves.
         let view = Rect::from_xywh(w as i32 / 3, h as i32 / 3, 2560, 1440).intersect(&region);
-        b.time(format!("Curves dialog change, layer preview 100 % view{sel}"), |b| {
+        b.time(&format!("Curves dialog change, layer preview 100 % view{sel}"), |b| {
             v = (v + 7) % 120;
             let t = Instant::now();
             let p =
@@ -428,7 +428,7 @@ fn main() {
         println!("  (zoomed-out proxy k {k} setup: {:.1} ms)", ms(t));
         let kk = k as i32;
         let pregion = Rect::new(region.x0 / kk, region.y0 / kk, region.x1 / kk + 1, region.y1 / kk + 1).intersect(&proxy.bounds());
-        b.time(format!("Curves dialog change, layer preview zoomed out{sel}"), |b| {
+        b.time(&format!("Curves dialog change, layer preview zoomed out{sel}"), |b| {
             v = (v + 7) % 120;
             let t = Instant::now();
             let p = photocraft_ui_egui::adjust_preview::proxy_with_settings(&proxy, "curves", &json!({"points": [[0, 0], [100, 100 + v], [255, 255]]}))

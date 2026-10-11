@@ -14,13 +14,14 @@ env:
 
 jobs:
   test:
-    name: win (${{ matrix.v }} ${{ matrix.rep }})
+    name: win (${{ matrix.v }} ${{ matrix.edit }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        v: [su, si, iA, iB]
-        rep: [1, 2, 3]
+        v: [su, si]
+        rep: [1]
+        edit: [engine, ui-egui]
     defaults:
       run:
         shell: bash
@@ -93,6 +94,11 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Simulate a PR (one-line edit)
+        env:
+          EDIT: ${{ matrix.edit }}
+        run: echo "// simulated PR edit" >> "crates/$EDIT/src/lib.rs"
+
       - name: Build
         working-directory: ${{ env.WS }}
         run: |
@@ -143,7 +149,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: timings-${{ matrix.v }}-${{ matrix.rep }}
+          name: timings-${{ matrix.v }}-${{ matrix.edit }}
           path: ${{ env.WS }}/target/cargo-timings/cargo-timing.html
           if-no-files-found: warn
 

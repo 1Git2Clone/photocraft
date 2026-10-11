@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        v: [base, nextest, lld, devdrive, all, nodebug]
+        v: [nextest, nodebug, nlld, ndl]
         rep: [1, 2, 3]
     defaults:
       run:
@@ -31,7 +31,8 @@ jobs:
           Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | Format-List
           Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
           "cores: $env:NUMBER_OF_PROCESSORS"
-          "cpu: $((Get-CimInstance Win32_Processor).Name)"
+          $cpu = (Get-CimInstance Win32_Processor).Name
+          Write-Output "CPU=$cpu"
 
       - uses: actions/checkout@v4
 
@@ -46,7 +47,7 @@ jobs:
             RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
 
       - name: No debuginfo
-        if: matrix.v == 'nodebug'
+        if: matrix.v == 'nodebug' || matrix.v == 'ndl'
         run: echo "CARGO_PROFILE_DEV_DEBUG=0" >> "$GITHUB_ENV"
 
       - name: Pick workspace
@@ -61,17 +62,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: exp-${{ matrix.v }}
+          key: exp-${{ matrix.v == 'nlld' && 'lld' || matrix.v == 'ndl' && 'nodebug' || matrix.v }}
           workspaces: ${{ env.WS }} -> target
           cache-on-failure: true
 
       - name: rust-lld linker
-        if: matrix.v == 'lld' || matrix.v == 'all'
+        if: matrix.v == 'lld' || matrix.v == 'all' || matrix.v == 'nlld' || matrix.v == 'ndl'
         working-directory: ${{ env.WS }}
         run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
 
       - name: Install nextest
-        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug'
+        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -89,7 +90,7 @@ jobs:
           case "${{ matrix.v }}" in
             base|lld|devdrive) cargo test --workspace --locked --features heif ;;
             noex) cargo test --workspace --locked --features heif --lib --bins --tests ;;
-            nextest|all|nodebug) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
+            nextest|all|nodebug|nlld|ndl) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
           esac
 
       - name: Doc tests

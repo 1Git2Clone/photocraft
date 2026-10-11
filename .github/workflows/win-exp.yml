@@ -19,8 +19,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        v: [uio0, unit, integ]
+        v: [uA, uB, su, si]
         rep: [1, 2, 3]
+        exclude:
+          - {v: su, rep: 2}
+          - {v: su, rep: 3}
+          - {v: si, rep: 2}
+          - {v: si, rep: 3}
     defaults:
       run:
         shell: bash
@@ -47,7 +52,7 @@ jobs:
             RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
 
       - name: No debuginfo
-        if: matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ'
+        if: matrix.v != 'base'
         run: echo "CARGO_PROFILE_DEV_DEBUG=0" >> "$GITHUB_ENV"
 
       - name: Pick workspace
@@ -67,8 +72,20 @@ jobs:
           cache-on-failure: true
 
       - name: opt-level 0 for ui-egui only (after the cache step)
-        if: matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ'
+        if: matrix.v != 'base'
         run: printf '[profile.dev.package.photocraft-ui-egui]\nopt-level = 0\n' >> .cargo/config.toml
+
+      - name: sccache
+        if: matrix.v == 'su' || matrix.v == 'si'
+        uses: Mozilla-Actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.18.0
+
+      - name: Use sccache (after the cache step)
+        if: matrix.v == 'su' || matrix.v == 'si'
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
 
       - name: rust-lld linker
         if: matrix.v == 'lld' || matrix.v == 'all' || matrix.v == 'nlld' || matrix.v == 'ndl'
@@ -76,7 +93,7 @@ jobs:
         run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
 
       - name: Install nextest
-        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ'
+        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ' || matrix.v == 'uA' || matrix.v == 'uB' || matrix.v == 'su' || matrix.v == 'si'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -86,9 +103,15 @@ jobs:
         run: |
           sel=()
           if [ "${{ matrix.v }}" != base ] && [ "${{ matrix.v }}" != lld ] && [ "${{ matrix.v }}" != devdrive ]; then sel=(--lib --bins --tests); fi
-          if [ "${{ matrix.v }}" = unit ]; then sel=(--lib --bins); fi
-          if [ "${{ matrix.v }}" = integ ]; then sel=(--test '*'); fi
-          cargo test --workspace --locked --features heif "${sel[@]}" --no-run --timings
+          case "${{ matrix.v }}" in
+            unit|su) sel=(--lib --bins) ;;
+            integ|si) sel=(--test '*') ;;
+            uA) sel=(--exclude photocraft-engine --lib --bins) ;;
+            uB) sel=(--lib) ;;
+          esac
+          pkg=(--workspace); if [ "${{ matrix.v }}" = uB ]; then pkg=(-p photocraft-engine); fi
+          feat=(--features heif); if [ "${{ matrix.v }}" = uB ]; then feat=(); fi
+          cargo test "${pkg[@]}" --locked "${feat[@]}" "${sel[@]}" --no-run --timings
 
       - name: Run tests
         working-directory: ${{ env.WS }}
@@ -96,17 +119,24 @@ jobs:
           case "${{ matrix.v }}" in
             base|lld|devdrive) cargo test --workspace --locked --features heif ;;
             noex) cargo test --workspace --locked --features heif --lib --bins --tests ;;
-            unit) cargo nextest run --workspace --locked --features heif --lib --bins --no-fail-fast ;;
-            integ) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast ;;
+            unit|su) cargo nextest run --workspace --locked --features heif --lib --bins --no-fail-fast ;;
+            integ|si) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast ;;
+            uA) cargo nextest run --workspace --exclude photocraft-engine --locked --features heif --lib --bins --no-fail-fast ;;
+            uB) cargo nextest run -p photocraft-engine --locked --lib --no-fail-fast ;;
             nextest|all|nodebug|nlld|ndl|uio0) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
           esac
 
       - name: Doc tests
-        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive' && matrix.v != 'integ'
+        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive' && matrix.v != 'integ' && matrix.v != 'si' && matrix.v != 'uB'
         working-directory: ${{ env.WS }}
         run: cargo test --workspace --locked --features heif --doc
 
+      - name: sccache stats
+        if: always() && (matrix.v == 'su' || matrix.v == 'si')
+        run: sccache --show-stats
+
       - name: Clippy
+        if: matrix.v != 'uA' && matrix.v != 'uB' && matrix.v != 'su'
         working-directory: ${{ env.WS }}
         run: cargo clippy --workspace --all-targets --locked --features heif -- -D warnings
 

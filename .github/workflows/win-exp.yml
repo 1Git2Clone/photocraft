@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        v: [nodebug, uio0]
+        v: [uio0, unit, integ]
         rep: [1, 2, 3]
     defaults:
       run:
@@ -47,7 +47,7 @@ jobs:
             RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
 
       - name: No debuginfo
-        if: matrix.v == 'nodebug' || matrix.v == 'ndl' || matrix.v == 'uio0'
+        if: matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ'
         run: echo "CARGO_PROFILE_DEV_DEBUG=0" >> "$GITHUB_ENV"
 
       - name: Pick workspace
@@ -62,12 +62,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: exp-${{ matrix.v == 'uio0' && 'nodebug' || matrix.v }}
+          key: exp-nodebug
           workspaces: ${{ env.WS }} -> target
           cache-on-failure: true
 
       - name: opt-level 0 for ui-egui only (after the cache step)
-        if: matrix.v == 'uio0'
+        if: matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ'
         run: printf '[profile.dev.package.photocraft-ui-egui]\nopt-level = 0\n' >> .cargo/config.toml
 
       - name: rust-lld linker
@@ -76,7 +76,7 @@ jobs:
         run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
 
       - name: Install nextest
-        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0'
+        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -86,6 +86,8 @@ jobs:
         run: |
           sel=()
           if [ "${{ matrix.v }}" != base ] && [ "${{ matrix.v }}" != lld ] && [ "${{ matrix.v }}" != devdrive ]; then sel=(--lib --bins --tests); fi
+          if [ "${{ matrix.v }}" = unit ]; then sel=(--lib --bins); fi
+          if [ "${{ matrix.v }}" = integ ]; then sel=(--test '*'); fi
           cargo test --workspace --locked --features heif "${sel[@]}" --no-run --timings
 
       - name: Run tests
@@ -94,11 +96,13 @@ jobs:
           case "${{ matrix.v }}" in
             base|lld|devdrive) cargo test --workspace --locked --features heif ;;
             noex) cargo test --workspace --locked --features heif --lib --bins --tests ;;
+            unit) cargo nextest run --workspace --locked --features heif --lib --bins --no-fail-fast ;;
+            integ) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast ;;
             nextest|all|nodebug|nlld|ndl|uio0) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
           esac
 
       - name: Doc tests
-        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive'
+        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive' && matrix.v != 'integ'
         working-directory: ${{ env.WS }}
         run: cargo test --workspace --locked --features heif --doc
 

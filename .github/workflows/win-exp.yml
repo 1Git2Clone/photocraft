@@ -19,13 +19,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        v: [uA, uB, su, si]
+        v: [su, si, iA, iB]
         rep: [1, 2, 3]
-        exclude:
-          - {v: su, rep: 2}
-          - {v: su, rep: 3}
-          - {v: si, rep: 2}
-          - {v: si, rep: 3}
     defaults:
       run:
         shell: bash
@@ -93,7 +88,7 @@ jobs:
         run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
 
       - name: Install nextest
-        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ' || matrix.v == 'uA' || matrix.v == 'uB' || matrix.v == 'su' || matrix.v == 'si'
+        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ' || matrix.v == 'uA' || matrix.v == 'uB' || matrix.v == 'su' || matrix.v == 'si' || matrix.v == 'iA' || matrix.v == 'iB'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -108,9 +103,12 @@ jobs:
             integ|si) sel=(--test '*') ;;
             uA) sel=(--exclude photocraft-engine --lib --bins) ;;
             uB) sel=(--lib) ;;
+            iA) sel=(--exclude photocraft-ui-egui --exclude photocraft-gpu --test '*') ;;
+            iB) sel=(--test '*') ;;
           esac
           pkg=(--workspace); if [ "${{ matrix.v }}" = uB ]; then pkg=(-p photocraft-engine); fi
-          feat=(--features heif); if [ "${{ matrix.v }}" = uB ]; then feat=(); fi
+          if [ "${{ matrix.v }}" = iB ]; then pkg=(-p photocraft-ui-egui -p photocraft-gpu); fi
+          feat=(--features heif); if [ "${{ matrix.v }}" = uB ] || [ "${{ matrix.v }}" = iB ]; then feat=(); fi
           cargo test "${pkg[@]}" --locked "${feat[@]}" "${sel[@]}" --no-run --timings
 
       - name: Run tests
@@ -123,11 +121,13 @@ jobs:
             integ|si) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast ;;
             uA) cargo nextest run --workspace --exclude photocraft-engine --locked --features heif --lib --bins --no-fail-fast ;;
             uB) cargo nextest run -p photocraft-engine --locked --lib --no-fail-fast ;;
+            iA) cargo nextest run --workspace --exclude photocraft-ui-egui --exclude photocraft-gpu --locked --features heif --test '*' --no-fail-fast ;;
+            iB) cargo nextest run -p photocraft-ui-egui -p photocraft-gpu --locked --test '*' --no-fail-fast ;;
             nextest|all|nodebug|nlld|ndl|uio0) cargo nextest run --workspace --locked --features heif --lib --bins --tests --no-fail-fast ;;
           esac
 
       - name: Doc tests
-        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive' && matrix.v != 'integ' && matrix.v != 'si' && matrix.v != 'uB'
+        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive' && matrix.v != 'integ' && matrix.v != 'si' && matrix.v != 'uB' && matrix.v != 'iA' && matrix.v != 'iB'
         working-directory: ${{ env.WS }}
         run: cargo test --workspace --locked --features heif --doc
 
@@ -136,7 +136,7 @@ jobs:
         run: sccache --show-stats
 
       - name: Clippy
-        if: matrix.v != 'uA' && matrix.v != 'uB' && matrix.v != 'su'
+        if: matrix.v != 'uA' && matrix.v != 'uB' && matrix.v != 'su' && matrix.v != 'iA' && matrix.v != 'iB'
         working-directory: ${{ env.WS }}
         run: cargo clippy --workspace --all-targets --locked --features heif -- -D warnings
 

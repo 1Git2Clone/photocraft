@@ -1318,7 +1318,7 @@ mod settings_tests {
         assert_eq!(t.color.settings, s.color.settings);
     }
 
-    // The Blend Text Colors Using Gamma test is `tests/text_gamma.rs`: it changes the
+    // The Blend Text Colors Using Gamma test is `tests/it/text_gamma.rs`: it changes the
     // process-wide text gamma, which would race every unit test here that composites type.
 
     #[test]

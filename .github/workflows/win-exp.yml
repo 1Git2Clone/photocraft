@@ -14,14 +14,13 @@ env:
 
 jobs:
   test:
-    name: win (${{ matrix.v }} ${{ matrix.edit }})
+    name: win (${{ matrix.v }} ${{ matrix.rep }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        v: [su, si]
-        rep: [1]
-        edit: [engine, ui-egui]
+        v: [su, si1, si2]
+        rep: [1, 2]
     defaults:
       run:
         shell: bash
@@ -72,13 +71,13 @@ jobs:
         run: printf '[profile.dev.package.photocraft-ui-egui]\nopt-level = 0\n' >> .cargo/config.toml
 
       - name: sccache
-        if: matrix.v == 'su' || matrix.v == 'si'
+        if: matrix.v == 'su' || matrix.v == 'si1' || matrix.v == 'si2'
         uses: Mozilla-Actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
           version: v0.18.0
 
       - name: Use sccache (after the cache step)
-        if: matrix.v == 'su' || matrix.v == 'si'
+        if: matrix.v == 'su' || matrix.v == 'si1' || matrix.v == 'si2'
         run: |
           echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
           echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
@@ -89,15 +88,10 @@ jobs:
         run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
 
       - name: Install nextest
-        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ' || matrix.v == 'uA' || matrix.v == 'uB' || matrix.v == 'su' || matrix.v == 'si' || matrix.v == 'iA' || matrix.v == 'iB'
+        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ' || matrix.v == 'uA' || matrix.v == 'uB' || matrix.v == 'su' || matrix.v == 'si1' || matrix.v == 'si2' || matrix.v == 'iA' || matrix.v == 'iB'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-
-      - name: Simulate a PR (one-line edit)
-        env:
-          EDIT: ${{ matrix.edit }}
-        run: echo "// simulated PR edit" >> "crates/$EDIT/src/lib.rs"
 
       - name: Build
         working-directory: ${{ env.WS }}
@@ -106,7 +100,7 @@ jobs:
           if [ "${{ matrix.v }}" != base ] && [ "${{ matrix.v }}" != lld ] && [ "${{ matrix.v }}" != devdrive ]; then sel=(--lib --bins --tests); fi
           case "${{ matrix.v }}" in
             unit|su) sel=(--lib --bins) ;;
-            integ|si) sel=(--test '*') ;;
+            integ|si1|si2) sel=(--test '*') ;;
             uA) sel=(--exclude photocraft-engine --lib --bins) ;;
             uB) sel=(--lib) ;;
             iA) sel=(--exclude photocraft-ui-egui --exclude photocraft-gpu --test '*') ;;
@@ -124,7 +118,9 @@ jobs:
             base|lld|devdrive) cargo test --workspace --locked --features heif ;;
             noex) cargo test --workspace --locked --features heif --lib --bins --tests ;;
             unit|su) cargo nextest run --workspace --locked --features heif --lib --bins --no-fail-fast ;;
-            integ|si) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast ;;
+            integ) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast ;;
+            si1) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast --partition count:1/2 ;;
+            si2) cargo nextest run --workspace --locked --features heif --test '*' --no-fail-fast --partition count:2/2 ;;
             uA) cargo nextest run --workspace --exclude photocraft-engine --locked --features heif --lib --bins --no-fail-fast ;;
             uB) cargo nextest run -p photocraft-engine --locked --lib --no-fail-fast ;;
             iA) cargo nextest run --workspace --exclude photocraft-ui-egui --exclude photocraft-gpu --locked --features heif --test '*' --no-fail-fast ;;
@@ -133,23 +129,23 @@ jobs:
           esac
 
       - name: Doc tests
-        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive' && matrix.v != 'integ' && matrix.v != 'si' && matrix.v != 'uB' && matrix.v != 'iA' && matrix.v != 'iB'
+        if: matrix.v != 'base' && matrix.v != 'lld' && matrix.v != 'devdrive' && matrix.v != 'integ' && matrix.v != 'si1' && matrix.v != 'si2' && matrix.v != 'uB' && matrix.v != 'iA' && matrix.v != 'iB'
         working-directory: ${{ env.WS }}
         run: cargo test --workspace --locked --features heif --doc
 
       - name: sccache stats
-        if: always() && (matrix.v == 'su' || matrix.v == 'si')
+        if: always() && (matrix.v == 'su' || matrix.v == 'si1' || matrix.v == 'si2')
         run: sccache --show-stats
 
       - name: Clippy
-        if: matrix.v != 'uA' && matrix.v != 'uB' && matrix.v != 'su' && matrix.v != 'iA' && matrix.v != 'iB'
+        if: matrix.v == 'si2'
         working-directory: ${{ env.WS }}
         run: cargo clippy --workspace --all-targets --locked --features heif -- -D warnings
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: timings-${{ matrix.v }}-${{ matrix.edit }}
+          name: timings-${{ matrix.v }}-${{ matrix.rep }}
           path: ${{ env.WS }}/target/cargo-timings/cargo-timing.html
           if-no-files-found: warn
 

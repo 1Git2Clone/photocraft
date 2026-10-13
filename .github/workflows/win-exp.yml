@@ -20,8 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         # 3 legs = su + si1 + si2; 2 legs = su + integ. Clippy and layers ride on si2 / integ.
-        v: [su, integ, si1, si2]
-        rep: [1, 2, 3]
+        v: [integ]
+        rep: [1, 2, 3, 4]
     defaults:
       run:
         shell: bash
@@ -72,13 +72,13 @@ jobs:
         run: printf '[profile.dev.package.photocraft-ui-egui]\nopt-level = 0\n' >> .cargo/config.toml
 
       - name: sccache
-        if: matrix.v == 'su' || matrix.v == 'integ' || matrix.v == 'si1' || matrix.v == 'si2'
+        if: matrix.v == 'su' || matrix.v == 'integ' || matrix.v == 'si1' || matrix.v == 'si2' || matrix.v == 'su'
         uses: Mozilla-Actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
           version: v0.18.0
 
       - name: Use sccache (after the cache step)
-        if: matrix.v == 'su' || matrix.v == 'integ' || matrix.v == 'si1' || matrix.v == 'si2'
+        if: matrix.v == 'su' || matrix.v == 'integ' || matrix.v == 'si1' || matrix.v == 'si2' || matrix.v == 'su'
         run: |
           echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
           echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
@@ -89,7 +89,7 @@ jobs:
         run: printf '[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"\n' >> .cargo/config.toml
 
       - name: Install nextest
-        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ' || matrix.v == 'uA' || matrix.v == 'uB' || matrix.v == 'su1' || matrix.v == 'su2' || matrix.v == 'iA' || matrix.v == 'iB' || matrix.v == 'si1' || matrix.v == 'si2'
+        if: matrix.v == 'nextest' || matrix.v == 'all' || matrix.v == 'nodebug' || matrix.v == 'nlld' || matrix.v == 'ndl' || matrix.v == 'uio0' || matrix.v == 'unit' || matrix.v == 'integ' || matrix.v == 'uA' || matrix.v == 'uB' || matrix.v == 'su1' || matrix.v == 'su2' || matrix.v == 'iA' || matrix.v == 'iB' || matrix.v == 'si1' || matrix.v == 'si2' || matrix.v == 'su'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest

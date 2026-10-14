@@ -107,6 +107,24 @@ jobs:
             cargo xtask perf --skip-build "${args[@]}"
           }
 
+      # A scenario measured here but missing from this class's baseline is never compared: a run
+      # only records a baseline for a class (or mode) that has none yet. Flag both on the run page.
+      - name: Baseline coverage
+        if: always()
+        env:
+          NAME: ${{ matrix.name }}
+        run: |
+          r=target/perf/results.json
+          [ -f "$r" ] || exit 0
+          class=$(jq -r '.machine.class' "$r")
+          compared=$(jq '[.scenarios[] | select(.baseline_p50_ms != null)] | length' "$r")
+          missing=$(jq -r '.scenarios as $s | $s | keys[] | select($s[.].p50_ms != null and $s[.].baseline_p50_ms == null)' "$r" | paste -sd ' ' -)
+          if [ "$compared" = 0 ]; then
+            echo "::warning title=No perf baseline ($NAME)::$class has no baseline for this mode, so nothing was regression-checked. If this run recorded one, commit the perf-baseline-$NAME artifact to perf/baselines/."
+          elif [ -n "$missing" ]; then
+            echo "::warning title=Scenarios without a baseline ($NAME)::Not regression-checked, missing from $class's baseline: $missing. Add them by re-recording it (run this workflow with update_baseline)."
+          fi
+
       - name: Job summary
         if: always()
         run: |

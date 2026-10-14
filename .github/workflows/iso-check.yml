@@ -5,7 +5,7 @@ name: Isolation check
 
 on:
   push:
-    branches: [ci-isolation-check]
+    branches: [ci-isolation-fix]
 
 env:
   CARGO_TERM_COLOR: always
@@ -35,7 +35,7 @@ jobs:
         with:
           tool: cargo-nextest
       - name: Build
-        run: cargo test -p photocraft-ui-egui --no-run --lib --test arbitrary_rotation_preview
+        run: cargo test -p photocraft-ui-egui --no-run --lib 
 
       - name: "cargo test, whole lib binary (shared process): type_tool"
         if: always()
@@ -47,24 +47,3 @@ jobs:
         if: always()
         run: cargo nextest run -p photocraft-ui-egui --lib -E 'test(postscript_only_style_shows_actual_subfamily)' --no-fail-fast 2>&1 | grep -E 'PASS|FAIL|left|right|Summary' || true
 
-      - name: "cargo test, whole binary: arbitrary_rotation_preview"
-        if: always() && runner.os == 'Linux'
-        run: cargo test -p photocraft-ui-egui --test arbitrary_rotation_preview 2>&1 | grep -E '^test |test result|preview moved' || true
-      - name: "cargo test, alone x3: size_changing_rotation_preview"
-        if: always() && runner.os == 'Linux'
-        run: |
-          for i in 1 2 3; do
-            cargo test -p photocraft-ui-egui --test arbitrary_rotation_preview -- --exact size_changing_rotation_preview_is_visible_and_preserves_the_panned_center 2>&1 | grep -E 'test result|preview moved' || true
-          done
-      - name: "nextest x3: size_changing_rotation_preview"
-        if: always() && runner.os == 'Linux'
-        run: |
-          for i in 1 2 3; do
-            cargo nextest run -p photocraft-ui-egui --test arbitrary_rotation_preview -E 'test(size_changing_rotation_preview)' 2>&1 | grep -E 'PASS|FAIL|preview moved' || true
-          done
-      - name: "opt-level 0 (as #2933's test profile), nextest x3: size_changing_rotation_preview"
-        if: always() && runner.os == 'Linux'
-        run: |
-          for _ in 1 2 3; do
-            cargo nextest run --config 'profile.test.package.photocraft-ui-egui.opt-level=0' -p photocraft-ui-egui --test arbitrary_rotation_preview -E 'test(size_changing_rotation_preview)' 2>&1 | grep -E 'PASS|FAIL|preview moved' || true
-          done

@@ -99,6 +99,9 @@ jobs:
           # One retry (same binaries) before a failure counts: a noisy neighbour rarely hits twice.
           cargo xtask perf "${args[@]}" || {
             echo "::warning::perf failed; retrying once to rule out a noisy runner"
+            # Keep the first attempt's reports (uploaded with the retry's): the retry overwrites them.
+            mkdir -p target/perf/attempt-1
+            mv target/perf/*.json target/perf/summary.md target/perf/attempt-1/ 2>/dev/null || true
             # Drop any baseline the failed run wrote, so the retry isn't compared against it.
             git checkout -q -- perf/baselines && git clean -qf -- perf/baselines
             cargo xtask perf --skip-build "${args[@]}"
@@ -121,6 +124,7 @@ jobs:
           path: |
             target/perf/*.json
             target/perf/summary.md
+            target/perf/attempt-1/
           if-no-files-found: warn
           retention-days: 30
 

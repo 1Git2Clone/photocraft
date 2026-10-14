@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
     defaults:
       run:
         shell: bash
@@ -61,4 +61,10 @@ jobs:
         run: |
           for i in 1 2 3; do
             cargo nextest run -p photocraft-ui-egui --test arbitrary_rotation_preview -E 'test(size_changing_rotation_preview)' 2>&1 | grep -E 'PASS|FAIL|preview moved' || true
+          done
+      - name: "opt-level 0 (as #2933's test profile), nextest x3: size_changing_rotation_preview"
+        if: always() && runner.os == 'Linux'
+        run: |
+          for _ in 1 2 3; do
+            cargo nextest run --config 'profile.test.package.photocraft-ui-egui.opt-level=0' -p photocraft-ui-egui --test arbitrary_rotation_preview -E 'test(size_changing_rotation_preview)' 2>&1 | grep -E 'PASS|FAIL|preview moved' || true
           done

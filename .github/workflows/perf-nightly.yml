@@ -15,10 +15,10 @@ name: Perf (nightly)
 # themselves), so they run the CPU canvas (--cpu; GPU-only benches read "not run" there). macOS
 # measures the GPU canvas.
 #
-# A run on a CPU without a baseline for its mode yet records one, if every bench ran and the CPU
-# canary held steady (regression check skipped that run), and uploads it as the `perf-baseline-<os>`
-# artifact: commit it to perf/baselines/ in a PR. To re-record an existing one, run this workflow by
-# hand with "update_baseline".
+# A run on a CPU without a baseline for its mode yet records one, if it measured every scenario and
+# the CPU canary held steady (regression check skipped that run), and uploads it as the
+# `perf-baseline-<os>` artifact: commit it to perf/baselines/ in a PR. To re-record an existing one,
+# run this workflow by hand with "update_baseline".
 
 on:
   schedule:

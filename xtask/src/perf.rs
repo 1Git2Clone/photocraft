@@ -16,7 +16,8 @@
 //! - `--advisory-budgets`: a broken enforced budget is reported, not a failure (CI runners are
 //!   slower than the machine the budgets were set on; only regressions fail there).
 //! - `--threshold PCT`: the regression threshold (default `settings.regression_pct`, 15 %).
-//! - `--bench NAME`: run only these benches (repeatable).
+//! - `--bench NAME`: run only these benches (repeatable; an unknown name is an error). A narrowed
+//!   run never records a new per-class baseline: it would leave the other scenarios out.
 //! - `--cpu`: CPU canvas only: benches with `cpu_args` get them, the others are skipped (their
 //!   scenarios read "not run"). For runners whose only GPU is a slow software one (WARP).
 //! - `--skip-build`: don't run `cargo build` first. `--reuse`: don't run the benches either;
@@ -673,12 +674,27 @@ pub fn baseline_canary(baseline: &Value, mode: &str) -> Option<f64> {
     baseline.get("modes")?.get(mode)?.get("canary_ms")?.as_array()?.iter().filter_map(Value::as_f64).reduce(f64::max)
 }
 
+/// Whether a run measured everything its mode and canvas plan to: not narrowed with `--bench`,
+/// something measured at all, and every scenario measured with a p50 (and its budget's metric) or
+/// left out on purpose (its bench doesn't run in this mode, or it isn't measurable yet). A failed
+/// bench or a missing row fails it.
+pub fn complete_coverage(outcomes: &[Outcome], filtered: bool) -> bool {
+    !filtered
+        && outcomes.iter().any(|o| o.stats.is_some())
+        && outcomes.iter().all(|o| match o.status {
+            Status::NotRun | Status::NotMeasurable(_) => true,
+            Status::Missing(_) => false,
+            _ => o.stats.as_ref().is_some_and(|s| s.p50.is_some()),
+        })
+}
+
 /// Whether a run records a baseline its machine class doesn't have yet for this mode (full or
-/// quick): only with a per-class `--baseline` path, only when every bench ran (a failed bench
-/// would leave its scenarios out), and only when the canary held steady (a machine that slowed
-/// down during the run would record inflated numbers).
-pub fn records_new_baseline(have_mode: bool, per_class: bool, benches_ok: bool, steady: bool) -> bool {
-    !have_mode && per_class && benches_ok && steady
+/// quick): only with a per-class `--baseline` path, only from a [`complete_coverage`] run (a
+/// failed bench, a missing row or `--bench` would leave scenarios out, and they'd never be
+/// compared), and only when the canary held steady (a machine that slowed down during the run
+/// would record inflated numbers).
+pub fn records_new_baseline(have_mode: bool, per_class: bool, complete: bool, steady: bool) -> bool {
+    !have_mode && per_class && complete && steady
 }
 
 /// `--baseline` with `{class}` replaced by the machine class (one baseline file per class).
@@ -759,6 +775,9 @@ fn run_in(root: &Path, target: &Path, o: &Opts) -> Result<(), String> {
     let mode = if o.quick { "quick" } else { "full" };
     let threshold = o.threshold.unwrap_or(budgets.settings.regression_pct);
     let out_dir = target.join("perf");
+    if let Some(name) = o.benches.iter().find(|n| !budgets.bench.iter().any(|b| &b.name == *n)) {
+        return Err(format!("perf: unknown bench `{name}` (not in {BUDGETS})"));
+    }
 
     // Which benches run in this mode.
     let mut plan: Vec<(&BenchSpec, Vec<String>)> = Vec::new();
@@ -903,30 +922,28 @@ fn run_in(root: &Path, target: &Path, o: &Opts) -> Result<(), String> {
     // A per-class path (`{class}`) records a machine class (or mode) it hasn't seen yet instead of
     // only skipping: hosted runners rotate CPUs, so each one gets its own baseline file to commit.
     let per_class = baseline_path != o.baseline;
-    let benches_ok = reports.iter().all(|(_, r)| r.is_ok());
     let found = baseline_value.as_ref().map(|b| baseline_for(b, &class, mode));
     let have_mode = matches!(found, Some(Ok(_)));
-    let record_new = records_new_baseline(have_mode, per_class, benches_ok, steady);
-    let (baseline, baseline_note) = match found {
+    let (baseline, why) = match found {
         Some(Ok(b)) => (Some(b), None),
-        other => {
-            let why = match other {
-                Some(Err(e)) => e,
-                _ => format!("no {baseline_path} yet: regression check skipped"),
-            };
-            let note = if record_new {
-                format!("{why}; this run recorded it in {baseline_path} (commit it to compare against it)")
-            } else if per_class && !benches_ok {
-                format!("{why}; not recorded because a bench failed")
-            } else if per_class && !steady {
-                format!("{why}; not recorded because the CPU canary moved more than {STEADY_PCT:.0} % during the run")
-            } else {
-                why
-            };
-            (None, Some(note))
-        }
+        Some(Err(e)) => (None, Some(e)),
+        None => (None, Some(format!("no {baseline_path} yet: regression check skipped"))),
     };
     let mut outcomes = evaluate(&budgets, &reports, baseline.as_ref(), threshold, !o.quick);
+    let benches_ok = reports.iter().all(|(_, r)| r.is_ok());
+    let complete = benches_ok && complete_coverage(&outcomes, !o.benches.is_empty());
+    let record_new = records_new_baseline(have_mode, per_class, complete, steady);
+    let baseline_note = why.map(|why| {
+        if record_new {
+            format!("{why}; this run recorded it in {baseline_path} (commit it to compare against it)")
+        } else if per_class && !complete {
+            format!("{why}; not recorded because the run didn't measure every scenario (a bench failed, a row is missing, or --bench)")
+        } else if per_class && !steady {
+            format!("{why}; not recorded because the CPU canary moved more than {STEADY_PCT:.0} % during the run")
+        } else {
+            why
+        }
+    });
     if o.advisory_budgets {
         // Budgets are set for a developer machine; on slower CI hardware only regressions fail.
         for oc in outcomes.iter_mut().filter(|oc| oc.status == Status::Broken) {
@@ -1296,7 +1313,7 @@ not_measurable = "needs a frame harness"
         assert_eq!(baseline_path(BASELINE, "linux-x86-64-epyc"), BASELINE);
         // A new class is recorded only from a complete run, and only with a per-class path.
         assert!(records_new_baseline(false, true, true, true));
-        assert!(!records_new_baseline(false, true, false, true), "a failed bench would leave its scenarios out");
+        assert!(!records_new_baseline(false, true, false, true), "an incomplete run would leave scenarios out");
         assert!(!records_new_baseline(false, true, true, false), "a run that slowed down would record inflated numbers");
         assert!(!records_new_baseline(true, true, true, true));
         assert!(!records_new_baseline(false, false, true, true));
@@ -1337,6 +1354,36 @@ not_measurable = "needs a frame harness"
         let scenarios = json!({"P1": {"p50_ms": p50}, "P2": {"p50_ms": p50}});
         let b = json!({"machine_class": class, "modes": {"full": {"canary_ms": [canary, canary], "scenarios": scenarios}}});
         write(&dir.join(format!("perf/baselines/{class}.json")), &b.to_string()).unwrap();
+    }
+
+    #[test]
+    fn only_complete_runs_record_a_new_baseline() {
+        let both = json!([{"name": "move row", "samples_ms": [10.0]}, {"name": "opacity row", "samples_ms": [10.0]}]);
+        let recorded = |dir: &Path| dir.join(format!("perf/baselines/{}.json", this_class())).exists();
+        // A row missing from the report fails the run, and leaves no partial baseline behind.
+        let dir = scratch("record-incomplete", json!([{"name": "move row", "samples_ms": [10.0]}]), [100.0, 100.0]);
+        let err = reuse(&dir, &[]).unwrap_err();
+        assert!(err.contains("P2 opacity"), "{err}");
+        assert!(!recorded(&dir), "a row is missing");
+        // A run narrowed with --bench measures part of the mode: it passes, but records nothing.
+        std::fs::write(dir.join("target/perf/b.json"), report(both.clone()).to_string()).unwrap();
+        reuse(&dir, &["--bench", "b"]).unwrap();
+        assert!(!recorded(&dir), "--bench narrows the run");
+        // A misspelt --bench is an error, not an empty run that records an empty baseline.
+        assert!(reuse(&dir, &["--bench", "nope"]).unwrap_err().contains("unknown bench `nope`"));
+        assert!(!recorded(&dir));
+        // The complete run records it.
+        reuse(&dir, &[]).unwrap();
+        assert!(recorded(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Measured nothing at all (every scenario not run or not measurable): not complete.
+        let b = parse_budgets(TOML).unwrap();
+        assert!(!complete_coverage(&evaluate(&b, &BTreeMap::new(), None, 15.0, true), false));
+        let mut reports = BTreeMap::new();
+        reports.insert("b".to_string(), Ok(report(both)));
+        assert!(complete_coverage(&evaluate(&b, &reports, None, 15.0, true), false));
+        assert!(!complete_coverage(&evaluate(&b, &reports, None, 15.0, true), true));
     }
 
     #[test]

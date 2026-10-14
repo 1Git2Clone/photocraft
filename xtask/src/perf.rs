@@ -324,6 +324,11 @@ pub fn verdict(sc: &Scenario, stats: &Stats, base: Option<&Stats>, settings: &Se
     {
         return Status::Regressed;
     }
+    budget_verdict(sc, stats, budgets_apply)
+}
+
+/// The budget half of [`verdict`], without the baseline.
+fn budget_verdict(sc: &Scenario, stats: &Stats, budgets_apply: bool) -> Status {
     match (budgets_apply, sc.budget_ms, stats.metric(sc.metric)) {
         (true, Some(budget), Some(v)) if v > budget => {
             if sc.enforce {
@@ -336,6 +341,16 @@ pub fn verdict(sc: &Scenario, stats: &Stats, base: Option<&Stats>, settings: &Se
         (true, Some(_), None) => Status::Missing(format!("no {} in the bench row", sc.metric.label())),
         _ => Status::Tracked,
     }
+}
+
+/// Whether an outcome fails the run. On a slow host (`slow`) a regression alone is reported, not
+/// failed, but an enforced budget it also breaks still fails ([`verdict`] reports the regression
+/// first), unless budgets don't apply or are advisory (`enforce_budgets` false).
+pub fn fails_run(sc: &Scenario, oc: &Outcome, slow: bool, enforce_budgets: bool) -> bool {
+    if slow && oc.status == Status::Regressed {
+        return enforce_budgets && oc.stats.as_ref().is_some_and(|st| budget_verdict(sc, st, true) == Status::Broken);
+    }
+    oc.status.fails()
 }
 
 /// Evaluates every scenario against the bench reports (`bench name → report`, `None` when the
@@ -981,10 +996,17 @@ fn run_in(root: &Path, target: &Path, o: &Opts) -> Result<(), String> {
         (Some(why), None) => Some(why),
         (None, n) => n,
     };
-    let failures: Vec<String> = outcomes
+    let enforce_budgets = !o.quick && !o.advisory_budgets;
+    let failures: Vec<String> = budgets
+        .scenario
         .iter()
-        .filter(|o| o.status.fails() && !(slow.is_some() && o.status == Status::Regressed))
-        .map(|o| format!("{} {}: {}", o.id, o.title, o.status.label()))
+        .zip(&outcomes)
+        .filter(|(sc, oc)| fails_run(sc, oc, slow.is_some(), enforce_budgets))
+        .map(|(_, oc)| {
+            // On a slow host a regression that still fails does so for its broken budget.
+            let status = if slow.is_some() && oc.status == Status::Regressed { Status::Broken } else { oc.status.clone() };
+            format!("{} {}: {}", oc.id, oc.title, status.label())
+        })
         .collect();
     let bench_failures: Vec<String> = reports.iter().filter_map(|(n, r)| r.as_ref().err().map(|e| format!("bench {n}: {e}"))).collect();
     let commit = git(root, &["rev-parse", "HEAD"]);
@@ -1384,6 +1406,20 @@ not_measurable = "needs a frame harness"
         reports.insert("b".to_string(), Ok(report(both)));
         assert!(complete_coverage(&evaluate(&b, &reports, None, 15.0, true), false));
         assert!(!complete_coverage(&evaluate(&b, &reports, None, 15.0, true), true));
+    }
+
+    #[test]
+    fn a_slow_host_excuses_regressions_not_enforced_budgets() {
+        // The canary is twice the baseline's: the host is slow. P1 and P2 regressed (100 vs 10 ms);
+        // P1 also breaks its enforced 25 ms budget, P2 only its unenforced one.
+        let rows = json!([{"name": "move row", "samples_ms": [100.0]}, {"name": "opacity row", "samples_ms": [100.0]}]);
+        let dir = scratch("slow-budget", rows, [200.0, 200.0]);
+        write_baseline(&dir, 10.0, 100.0);
+        let err = reuse(&dir, &[]).unwrap_err();
+        assert!(err.contains("1 perf failure(s)") && err.contains("P1 move: **BUDGET BROKEN**"), "{err}");
+        // With advisory budgets only the regressions are left, and the slow host excuses them.
+        reuse(&dir, &["--advisory-budgets"]).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -37,6 +37,10 @@ fn usage_and_unknown_command() {
     assert!(String::from_utf8_lossy(&o.stderr).contains("convert"));
     let o = bin().arg("frobnicate").output().unwrap();
     assert_eq!(o.status.code(), Some(2));
+    // `help` names a subcommand or nothing: anything else is a usage error too.
+    let o = bin().args(["help", "frobnicate"]).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(!o.stderr.is_empty());
     let (out, _) = ok(bin().arg("--help"));
     assert!(out.contains("convert"));
     let (out, _) = ok(bin().arg("--version"));

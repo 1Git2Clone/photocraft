@@ -6,27 +6,23 @@ use serde_json::{Value, json};
 
 use crate::{
     R,
-    args::Args,
+    args::{ConvertArgs, InfoArgs, RunArgs},
     output::{export_opts, missing_font_warnings, print_json, warn_all},
 };
 
-pub(crate) fn convert(a: &Args, _out: &mut dyn Write, err: &mut dyn Write) -> R {
-    let [input, output] = a.positional.as_slice() else {
-        return Err("convert needs <in> <out>".into());
-    };
-    let opts = export_opts(a)?;
+pub(crate) fn convert(a: &ConvertArgs, _out: &mut dyn Write, err: &mut dyn Write) -> R {
+    let (input, output) = (&a.input, &a.output);
+    let opts = export_opts(&a.export)?;
     let o = files::open(Path::new(input)).map_err(|e| e.to_string())?;
     warn_all(err, &o.warnings);
     warn_all(err, &photocraft_engine::type_extra_cmds::missing_font_warnings(&o.document));
-    let ws = files::save(&o.document, Path::new(output), a.get("--format"), &opts, None).map_err(|e| e.to_string())?;
+    let ws = files::save(&o.document, Path::new(output), a.export.format.as_deref(), &opts, None).map_err(|e| e.to_string())?;
     warn_all(err, &ws);
     Ok(())
 }
 
-pub(crate) fn info(a: &Args, out: &mut dyn Write) -> R {
-    let [file] = a.positional.as_slice() else {
-        return Err("info needs <file>".into());
-    };
+pub(crate) fn info(a: &InfoArgs, out: &mut dyn Write) -> R {
+    let file = &a.file;
     let mut h = Headless::trusted_local();
     let opened = h.open(Path::new(file)).map_err(|e| e.to_string())?;
     let mut doc = h.inspect(None).map_err(|e| e.to_string())?;
@@ -42,47 +38,45 @@ pub(crate) fn info(a: &Args, out: &mut dyn Write) -> R {
             m.remove(k);
         }
     }
-    print_json(out, &doc, a.has("--compact"))
+    print_json(out, &doc, a.compact)
 }
 
 /// `(id, params)` pairs from repeated `--cmd`/`--params` flags.
-fn command_list(a: &Args) -> Result<Vec<(String, Value)>, String> {
+fn command_list(a: &RunArgs) -> Result<Vec<(String, Value)>, String> {
     let mut cmds: Vec<(String, Value)> = Vec::new();
-    for (k, v) in &a.flags {
-        match (k.as_str(), v) {
-            ("--cmd", Some(id)) => cmds.push((id.clone(), json!({}))),
-            ("--params", Some(p)) => {
-                let last = cmds.last_mut().ok_or("--params must follow a --cmd")?;
-                last.1 = serde_json::from_str(p).map_err(|e| format!("bad --params JSON for `{}`: {e}", last.0))?;
-            }
-            _ => {}
+    for (is_cmd, v) in &a.steps {
+        if *is_cmd {
+            cmds.push((v.clone(), json!({})));
+        } else {
+            let last = cmds.last_mut().ok_or("--params must follow a --cmd")?;
+            last.1 = serde_json::from_str(v).map_err(|e| format!("bad --params JSON for `{}`: {e}", last.0))?;
         }
     }
     Ok(cmds)
 }
 
-pub(crate) fn run_cmds(a: &Args, out: &mut dyn Write, err: &mut dyn Write) -> R {
-    let opts = export_opts(a)?;
+pub(crate) fn run_cmds(a: &RunArgs, out: &mut dyn Write, err: &mut dyn Write) -> R {
+    let opts = export_opts(&a.export)?;
     let mut h = Headless::trusted_local();
     // Opening, running commands and exporting can all notice the same missing font:
     // one `run` invocation reports each warning line at most once.
     let mut reported_fonts = std::collections::HashSet::<String>::new();
-    match (a.positional.as_slice(), a.get("--new")) {
-        ([file], None) => {
+    match (a.file.as_deref(), a.new.as_deref()) {
+        (Some(file), None) => {
             let o = h.open(Path::new(file)).map_err(|e| e.to_string())?;
             let ws: Vec<String> = serde_json::from_value(o["warnings"].clone()).unwrap_or_default();
             reported_fonts.extend(ws.iter().cloned());
             warn_all(err, &ws);
             reported_fonts.extend(ws);
         }
-        ([], Some(new)) => {
+        (None, Some(new)) => {
             let p: Value = serde_json::from_str(new).map_err(|e| format!("bad --new JSON: {e}"))?;
             h.command_run("file.new", p).map_err(|e| format!("--new: {e}"))?;
         }
         _ => return Err("run needs exactly one of <file> or --new <json>".into()),
     }
     let cmds = command_list(a)?;
-    if cmds.is_empty() && a.get("--out").is_none() {
+    if cmds.is_empty() && a.out.is_none() {
         return Err("run needs at least one --cmd (or --out)".into());
     }
     for (id, params) in cmds {
@@ -115,8 +109,8 @@ pub(crate) fn run_cmds(a: &Args, out: &mut dyn Write, err: &mut dyn Write) -> R 
         .filter(|w| reported_fonts.insert(w.clone()))
         .collect();
     warn_all(err, &remaining);
-    if let Some(o) = a.get("--out") {
-        let r = h.save(None, Some(Path::new(o)), a.get("--format"), &opts).map_err(|e| e.to_string())?;
+    if let Some(o) = &a.out {
+        let r = h.save(None, Some(Path::new(o)), a.export.format.as_deref(), &opts).map_err(|e| e.to_string())?;
         let ws: Vec<String> = serde_json::from_value(r["warnings"].clone()).unwrap_or_default();
         let ws: Vec<String> = ws.into_iter().filter(|w| reported_fonts.insert(w.clone())).collect();
         warn_all(err, &ws);

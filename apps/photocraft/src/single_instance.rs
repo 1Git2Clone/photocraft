@@ -83,7 +83,7 @@ pub struct LaunchContext<'a> {
     /// Paths that aren't valid Unicode: this launch reports them.
     pub unreadable_paths: bool,
     /// Options that only apply to the process they're given to (`--safe-gpu`, …).
-    pub launch_options: &'a [&'static str],
+    pub launch_options: &'a [crate::launch_args::PerProcess],
 }
 
 /// Why this launch runs as its own instance, or `None` to take part in single-instance.
@@ -101,7 +101,8 @@ pub fn skip_reason(c: &LaunchContext) -> Option<String> {
         return Some("some paths aren't valid Unicode".into());
     }
     if !c.launch_options.is_empty() {
-        return Some(format!("{} only applies to a new process", c.launch_options.join(", ")));
+        let options: Vec<String> = c.launch_options.iter().map(ToString::to_string).collect();
+        return Some(format!("{} only applies to a new process", options.join(", ")));
     }
     None
 }
@@ -642,7 +643,8 @@ mod tests {
         assert_eq!(skip_reason(&LaunchContext { new_instance_env: Some(""), ..base }), None);
         assert!(skip_reason(&LaunchContext { control: true, ..base }).is_some());
         assert!(skip_reason(&LaunchContext { unreadable_paths: true, ..base }).is_some());
-        let reason = skip_reason(&LaunchContext { launch_options: &["--safe-gpu"], ..base });
-        assert!(reason.is_some_and(|r| r.contains("--safe-gpu")));
+        use crate::launch_args::PerProcess;
+        let reason = skip_reason(&LaunchContext { launch_options: &[PerProcess::SafeGpu, PerProcess::GpuAdapterEnv], ..base });
+        assert_eq!(reason.as_deref(), Some("--safe-gpu, PHOTOCRAFT_GPU_ADAPTER only applies to a new process"));
     }
 }

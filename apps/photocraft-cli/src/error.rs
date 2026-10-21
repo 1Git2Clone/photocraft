@@ -17,17 +17,6 @@ pub(crate) enum CliError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Actions(#[from] ActionsError),
-    /// A required argument is missing: `convert needs <in> <out>`.
-    #[error("{sub} needs {what}")]
-    Needs { sub: &'static str, what: &'static str },
-    #[error("bad {flag} `{value}`: expected {expected}")]
-    BadValue { flag: &'static str, value: String, expected: &'static str },
-    #[error("bad --port `{0}`")]
-    BadPort(String),
-    #[error("bad --new JSON: {0}")]
-    BadNew(#[source] serde_json::Error),
-    #[error("bad --params JSON for `{id}`: {source}")]
-    BadParams { id: String, source: serde_json::Error },
     #[error("{}: {source}", path.display())]
     ReadDir { path: PathBuf, source: std::io::Error },
     #[error("--params must follow a --cmd")]

@@ -1,8 +1,9 @@
 //! The command line, as clap types. Values stay strings: the handlers check them, with their own
 //! messages (#7071). A flag a subcommand doesn't take is a usage error, so a typo such as
-//! `--fromat` can't be silently ignored (#423). A value flag never takes the next flag as its
-//! value: a value starting with `-` is written `--out=-image.png` (or `./-image.png`); negative
-//! numbers are kept where they mean something.
+//! `--fromat` can't be silently ignored (#423), and so is a repeated one: `--quality 80 --quality
+//! 60` is more likely a mistake than a choice. A value starting with `-` is written
+//! `--out=-image.png` (or `./-image.png`), so a value flag never takes the next flag as its value;
+//! negative numbers are kept where they mean something.
 
 use clap::builder::NonEmptyStringValueParser;
 use clap::error::ErrorKind;
@@ -10,7 +11,7 @@ use clap::{ArgAction, ArgMatches, Args, CommandFactory, FromArgMatches, Parser, 
 
 /// photocraft-cli: headless PhotoCraft
 #[derive(Parser)]
-#[command(name = "photocraft-cli", arg_required_else_help = true, args_override_self = true)]
+#[command(name = "photocraft-cli", version = photocraft_engine::build_info::long_version_static(), arg_required_else_help = true)]
 pub(crate) struct Cli {
     #[command(subcommand)]
     pub(crate) command: Command,
@@ -261,12 +262,12 @@ pub(crate) fn parse(args: &[String]) -> Result<Cli, clap::Error> {
                 if a.bridge.is_some() && (a.control.automation_read_root.is_some() || a.control.automation_write_root.is_some()) {
                     return Err(sub.error(ErrorKind::ArgumentConflict, BRIDGE_ROOTS));
                 }
-                check_server(sub, &given, m, a.bridge.is_some(), "--bridge")?;
+                check_server(sub, m, a.bridge.is_some(), "--bridge")?;
             }
         }
         (Command::Serve(a), Some((name, m))) => {
             if let Some(sub) = cmd.find_subcommand_mut(name) {
-                check_server(sub, &given, m, a.port.is_some(), "--port")?;
+                check_server(sub, m, a.port.is_some(), "--port")?;
             }
         }
         _ => {}
@@ -277,14 +278,8 @@ pub(crate) fn parse(args: &[String]) -> Result<Cli, clap::Error> {
 const BRIDGE_ROOTS: &str = "configure automation roots on the desktop app; --automation-read-root and --automation-write-root require headless MCP mode";
 
 /// Refuse `mcp` and `serve` launch options that would otherwise be silently ignored (#8035): a
-/// repeated one (the last wins everywhere else), and a token flag without the bridge or port that
-/// reads it.
-fn check_server(sub: &mut clap::Command, given: &[&str], m: &ArgMatches, has_transport: bool, transport: &str) -> Result<(), clap::Error> {
-    let mut seen = std::collections::HashSet::new();
-    let flags = given.iter().skip(1).take_while(|a| **a != "--").filter(|a| a.starts_with("--"));
-    if let Some(flag) = flags.map(|a| a.split_once('=').map_or(*a, |(k, _)| k)).find(|k| !seen.insert(*k)) {
-        return Err(sub.error(ErrorKind::ArgumentConflict, format!("the argument '{flag}' cannot be used multiple times")));
-    }
+/// token flag without the bridge or port that reads it.
+fn check_server(sub: &mut clap::Command, m: &ArgMatches, has_transport: bool, transport: &str) -> Result<(), clap::Error> {
     for (id, flag) in [("control_token", "--control-token"), ("control_token_file", "--control-token-file")] {
         if m.contains_id(id) && !has_transport {
             return Err(sub.error(ErrorKind::MissingRequiredArgument, format!("{flag} requires {transport}")));

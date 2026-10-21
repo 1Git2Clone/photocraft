@@ -4719,6 +4719,7 @@ version = "0.11.1"
 dependencies = [
  "arboard",
  "async-io",
+ "clap",
  "core-graphics2",
  "dispatch2",
  "eframe",
@@ -4749,6 +4750,7 @@ dependencies = [
  "ron",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.21",
  "winit",
  "winresource",
  "winsafe",

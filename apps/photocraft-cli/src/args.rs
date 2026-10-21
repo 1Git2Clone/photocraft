@@ -12,8 +12,9 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use clap::error::ErrorKind;
+use clap::parser::ValueSource;
 use clap::{ArgAction, ArgGroup, ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use photocraft_automation::args::{AutomationArgs, ControlArgs, control_port};
+use photocraft_automation::args::{AutomationArgs, ControlArgs, blank_env_is_unset, control_port, name_env_vars};
 use photocraft_codecs::{JpegFormat, TiffCompression};
 use photocraft_io::{DdsCompression, DpxBits, TgaBits};
 use serde_json::Value;
@@ -201,13 +202,16 @@ pub(crate) struct CommandsArgs {
 ///
 /// Headless: each automation root grants that direction of file access; an omitted root denies it.
 /// Prefer absolute root paths in MCP client configurations. Bridge: set the roots on the desktop
-/// app; root flags are refused. The token flags require --bridge.
+/// app; root flags are refused. The token flags require --bridge (or PHOTOCRAFT_CONTROL_PORT).
 #[derive(Args)]
 pub(crate) struct McpArgs {
     /// Bridge to the PhotoCraft app listening here instead of a headless engine; a bare port means
     /// 127.0.0.1:<PORT>
-    #[arg(long, value_name = "127.0.0.1:PORT", value_parser = bridge)]
+    #[arg(long, value_name = "127.0.0.1:PORT", env = "PHOTOCRAFT_CONTROL_PORT", value_parser = bridge)]
     pub(crate) bridge: Option<Bridge>,
+    /// `--bridge` came from PHOTOCRAFT_CONTROL_PORT, set by [`parse`].
+    #[arg(skip)]
+    pub(crate) bridge_from_env: bool,
     #[command(flatten)]
     pub(crate) control: ControlArgs,
     #[command(flatten)]
@@ -220,12 +224,15 @@ pub(crate) struct McpArgs {
 /// jobs.list/cancel, engine.commands,
 /// doc.open/new/place/save/exportLayers/exportDataSets/importDataSets/inspect/render/select/close,
 /// session.list, batch, methods (docs/control-protocol.md#headless-server). The token flags require
-/// --port; stdio needs no control token.
+/// --port (or PHOTOCRAFT_CONTROL_PORT); stdio needs no control token.
 #[derive(Args)]
 pub(crate) struct ServeArgs {
     /// Listen on 127.0.0.1:<PORT> instead of stdio
-    #[arg(long, value_name = "PORT", value_parser = control_port)]
+    #[arg(long, value_name = "PORT", env = "PHOTOCRAFT_CONTROL_PORT", value_parser = control_port)]
     pub(crate) port: Option<u16>,
+    /// `--port` came from PHOTOCRAFT_CONTROL_PORT, set by [`parse`].
+    #[arg(skip)]
+    pub(crate) port_from_env: bool,
     #[command(flatten)]
     pub(crate) control: ControlArgs,
     #[command(flatten)]
@@ -245,7 +252,7 @@ enum ValueError {
     TiffCompression,
     #[error("expected baseline, optimized or progressive")]
     JpegFormat,
-    /// Why a `--bridge` value is refused.
+    /// Why a `--bridge` value, or a PHOTOCRAFT_CONTROL_PORT value for `mcp`, is refused.
     #[error("expected a port, 0-65535 (--bridge also takes 127.0.0.1:<PORT>)")]
     Bridge,
 }
@@ -293,7 +300,7 @@ impl fmt::Display for Bridge {
     }
 }
 
-/// `mcp --bridge`: a port, or `host:port`.
+/// `mcp --bridge`, or PHOTOCRAFT_CONTROL_PORT, which holds a port.
 fn bridge(s: &str) -> Result<Bridge, ValueError> {
     match control_port(s) {
         Ok(port) => Ok(Bridge::Port(port)),
@@ -323,22 +330,33 @@ fn steps(m: &ArgMatches) -> Vec<Step> {
 }
 
 /// Parse the arguments (without the binary name). clap reads them as `OsString`s: a path need not
-/// be valid Unicode (#1108), text must. A bare `--help` or `-h` is help even after a mistake on the
-/// same line (`--out --help`, `mcp stray.psd --help`): clap reports the mistake first.
+/// be valid Unicode (#1108), text must. A flag left out falls back to its environment variable,
+/// unless that is empty, and a bad value from one is a usage error naming the variable (#2491). A
+/// bare `--help` or `-h` is help even after a mistake on the same line (`--out --help`, `mcp
+/// stray.psd --help`): clap reports the mistake first.
 pub(crate) fn parse(args: &[OsString]) -> Result<Cli, clap::Error> {
-    let mut cmd = Cli::command();
+    let mut cmd = Cli::command().mut_subcommands(|sub| sub.mut_args(blank_env_is_unset));
     let argv = std::iter::once(OsString::from("photocraft-cli")).chain(args.iter().cloned());
     let matches = match cmd.try_get_matches_from_mut(argv) {
         Err(e) if args.iter().take_while(|a| *a != "--").any(|a| *a == "--help" || *a == "-h") => {
             let help = [OsString::from("photocraft-cli"), args.first().cloned().unwrap_or_default(), OsString::from("--help")];
             return Err(cmd.try_get_matches_from_mut(help).err().unwrap_or(e));
         }
-        matches => matches?,
+        matches => matches.map_err(|e| name_env_vars(e, &cmd, args))?,
     };
     let mut cli = Cli::from_arg_matches(&matches)?;
+    let from_env = |m: &ArgMatches, id: &str| m.value_source(id) == Some(ValueSource::EnvVariable);
     match (&mut cli.command, matches.subcommand()) {
         (Command::Run(r), Some((_, m))) => r.steps = steps(m),
         (Command::Mcp(a), Some((name, m))) => {
+            a.bridge_from_env = from_env(m, "bridge");
+            // The variable holds a port, as for the desktop app's --control: only the flag takes
+            // host:port, which `bridge` lets through.
+            if a.bridge_from_env
+                && let Some(Bridge::Addr(v)) = &a.bridge
+            {
+                return Err(cmd.error(ErrorKind::ValueValidation, format!("invalid value '{v}' for 'PHOTOCRAFT_CONTROL_PORT': {}", ValueError::Bridge)));
+            }
             if let Some(sub) = cmd.find_subcommand_mut(name) {
                 // The roots are the desktop process's to set: accepting them here promises authority
                 // the bridge can't give (#8035).
@@ -349,6 +367,7 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Cli, clap::Error> {
             }
         }
         (Command::Serve(a), Some((name, m))) => {
+            a.port_from_env = from_env(m, "port");
             if let Some(sub) = cmd.find_subcommand_mut(name) {
                 check_server(sub, m, a.port.is_some(), "--port")?;
             }
@@ -361,10 +380,11 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Cli, clap::Error> {
 const BRIDGE_ROOTS: &str = "configure automation roots on the desktop app; --automation-read-root and --automation-write-root require headless MCP mode";
 
 /// Refuse `mcp` and `serve` launch options that would otherwise be silently ignored (#8035): a
-/// token flag without the bridge or port that reads it.
+/// token flag without the bridge or port that reads it (as a flag or its variable). A token
+/// variable alone may be a stale export, so it isn't refused.
 fn check_server(sub: &mut clap::Command, m: &ArgMatches, has_transport: bool, transport: &str) -> Result<(), clap::Error> {
     for (id, flag) in [("control_token", "--control-token"), ("control_token_file", "--control-token-file")] {
-        if m.contains_id(id) && !has_transport {
+        if m.value_source(id) == Some(ValueSource::CommandLine) && !has_transport {
             return Err(sub.error(ErrorKind::MissingRequiredArgument, format!("{flag} requires {transport}")));
         }
     }

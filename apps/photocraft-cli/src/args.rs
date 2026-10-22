@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use clap::error::ErrorKind;
 use clap::parser::ValueSource;
 use clap::{ArgAction, ArgGroup, ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use photocraft_automation::args::{AutomationArgs, ControlArgs, blank_env_is_unset, control_port, name_env_vars};
+use photocraft_automation::args::{AutomationArgs, ControlArgs, blank_env_is_unset, conflict, control_port, name_env_vars};
 use photocraft_codecs::{JpegFormat, TiffCompression};
 use photocraft_io::{DdsCompression, DpxBits, TgaBits};
 use serde_json::Value;
@@ -358,8 +358,19 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Cli, clap::Error> {
                 return Err(cmd.error(ErrorKind::ValueValidation, format!("invalid value '{v}' for 'PHOTOCRAFT_CONTROL_PORT': {}", ValueError::Bridge)));
             }
             if let Some(sub) = cmd.find_subcommand_mut(name) {
-                // The roots are the desktop process's to set: accepting them here promises authority
-                // the bridge can't give (#8035).
+                // Only the bridge reads a token, so a stale exported pair doesn't stop a headless
+                // run.
+                if a.bridge.is_some() {
+                    conflict(sub, m, "control_token", "control_token_file")?;
+                }
+                // The roots are the headless engine's: the variable switching to the bridge would
+                // drop them, and the error names it.
+                if a.bridge_from_env {
+                    conflict(sub, m, "automation_read_root", "bridge")?;
+                    conflict(sub, m, "automation_write_root", "bridge")?;
+                }
+                // With --bridge they are the desktop process's to set: accepting them here promises
+                // authority the bridge can't give (#8035).
                 if a.bridge.is_some() && (a.automation.automation_read_root.is_some() || a.automation.automation_write_root.is_some()) {
                     return Err(sub.error(ErrorKind::ArgumentConflict, BRIDGE_ROOTS));
                 }
@@ -369,6 +380,10 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Cli, clap::Error> {
         (Command::Serve(a), Some((name, m))) => {
             a.port_from_env = from_env(m, "port");
             if let Some(sub) = cmd.find_subcommand_mut(name) {
+                // Only the TCP server reads a token, so a stale exported pair doesn't stop stdio.
+                if a.port.is_some() {
+                    conflict(sub, m, "control_token", "control_token_file")?;
+                }
                 check_server(sub, m, a.port.is_some(), "--port")?;
             }
         }

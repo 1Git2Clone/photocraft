@@ -1,0 +1,7 @@
+id: string-error
+valid:
+  - "fn parse(s: &str) -> Result<Port, PortError> { todo!() }"
+  - "fn name() -> Option<String> { None }"
+invalid:
+  - "fn parse(s: &str) -> Result<Port, String> { todo!() }"
+  - "type R = Result<(), String>;"

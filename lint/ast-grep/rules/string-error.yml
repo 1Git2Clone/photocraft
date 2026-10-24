@@ -1,0 +1,11 @@
+id: string-error
+language: rust
+severity: error
+message: String as an error type
+note: |
+  Return a #[derive(thiserror::Error)] enum (or anyhow::Error at a binary's top level), so a
+  caller can match on what failed and the messages live with their variants.
+rule:
+  pattern:
+    context: type T = Result<$OK, String>;
+    selector: generic_type

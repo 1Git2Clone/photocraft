@@ -1,0 +1,16 @@
+name: ast-grep (fork test)
+
+on:
+  push:
+    branches: ["test/ast-grep-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # The reusable workflow as proposed upstream, pinned to its commit on the fork: $/ must load
+  # the fork's action at that commit.
+  ast-grep:
+    uses: 1Git2Clone/craft-common-actions/.github/workflows/ast-grep.yml@94abf76bef2ce3110a066e8c6c7f06855797f9b8
+    with:
+      config: lint/ast-grep/sgconfig.yml

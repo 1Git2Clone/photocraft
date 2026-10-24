@@ -1,0 +1,21 @@
+name: ast-grep (fork test)
+
+on:
+  push:
+    branches: ["test/ast-grep-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The action as proposed upstream, pinned to its commit on the fork.
+      - uses: 1Git2Clone/craft-common-actions/actions/ast-grep@94abf76bef2ce3110a066e8c6c7f06855797f9b8
+        with:
+          config: lint/ast-grep/sgconfig.yml

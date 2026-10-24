@@ -1,0 +1,5 @@
+# Fork test of storytold/craft-common-actions ast-grep.yml (not for upstream).
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: rule-tests

@@ -1,0 +1,10 @@
+id: clap-error-message
+valid:
+  - cmd.error(ErrorKind::ArgumentConflict, UsageError::BridgeRoots)
+  - sub.error(kind, self)
+  - log.error("not a clap error")
+invalid:
+  - cmd.error(ErrorKind::ArgumentConflict, "configure automation roots on the desktop app")
+  - sub.error(ErrorKind::MissingRequiredArgument, format!("{flag} requires {transport}"))
+  - sub.error(ErrorKind::ArgumentConflict, BRIDGE_ROOTS)
+  - clap::Error::raw(ErrorKind::InvalidValue, "bad value")

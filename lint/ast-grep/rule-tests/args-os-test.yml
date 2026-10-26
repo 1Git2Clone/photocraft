@@ -1,0 +1,7 @@
+id: args-os
+valid:
+  - let code = photocraft_cli::run(std::env::args_os().skip(1), &mut out, &mut err);
+  - "let args: Vec<OsString> = env::args_os().collect();"
+invalid:
+  - "let args: Vec<String> = std::env::args().collect();"
+  - for a in env::args().skip(1) {}

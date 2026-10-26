@@ -1,0 +1,26 @@
+id: clap-error-message-variable
+language: rust
+severity: error
+message: clap error built from a string held in a variable
+note: |
+  The message was built with format! (or .to_string()) a few lines up. Give it a variant on a
+  #[derive(thiserror::Error)] enum instead, with the parts as fields, and pass the variant.
+rule:
+  # In this order: the call binds $MSG, then the function must hold a `let` of that same name.
+  all:
+    - any:
+        - pattern: $CMD.error($KIND, $MSG)
+        - pattern: Error::raw($KIND, $MSG)
+        - pattern: clap::Error::raw($KIND, $MSG)
+    - inside:
+        kind: function_item
+        stopBy: end
+        has:
+          stopBy: end
+          any:
+            - pattern: let $MSG = format!($$$);
+            - pattern: "let $MSG: String = $VAL;"
+            - pattern: let $MSG = $SRC.to_string();
+constraints:
+  MSG:
+    kind: identifier
